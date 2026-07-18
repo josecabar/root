@@ -1,0 +1,36 @@
+name: Build EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        pip install numpy
+        pip install scipy
+        pip install matplotlib
+        pip install pillow
+        pip install opencv-python
+        pip install pyinstaller
+
+    - name: Build
+      run: |
+        pyinstaller --onefile --windowed starshot.py
+
+    - name: Upload EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: starshot-exe
+        path: dist/starshot.exe
