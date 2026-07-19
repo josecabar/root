@@ -36,7 +36,7 @@ jobs:
 
     - name: Compress EXE with UPX
       run: |
-        upx -9 dist\starshot.exe -o starshot.exe
+        upx -9 --force dist\starshot.exe -o starshot.exe
 
     - name: Upload EXE to repository
       run: |
