@@ -802,68 +802,80 @@ def calculate_starshot_center(
     return center, radius
 
 
-
-
 # ==========================================
 # MAIN
 # ==========================================
 
 def main():
 
-    filename = select_file()
+    while True:
 
-    if not filename:
-        return
+        filename = select_file()
 
-    image = load_image(
-        filename
-    )
+        # Cancelar -> salir
+        if not filename:
+            break
+
+        image = load_image(
+            filename
+        )
+
+##        roi = select_roi(
+##            image
+##        )
+
+        roi = image
+
+        # ROI cancelada
+        if roi.size == 0:
+            continue
+
+        config = setup_analysis(
+            roi
+        )
+
+        if config is None:
+            continue
+
+        center, radius, threshold = config
+
+        _, binary = cv2.threshold(
+            roi,
+            threshold,
+            255,
+            cv2.THRESH_BINARY_INV
+        )
+
+        theta, profile = angular_profile(
+            binary,
+            center,
+            radius
+        )
+
+        peak_angles = find_peak_angles(
+            theta,
+            profile
+        )
+
+##        print("\nÁngulos detectados:")
 ##
-##    roi = select_roi(
-##        image
-##    )
+##        for i, a in enumerate(peak_angles):
+##            print(
+##                f"Haz {i+1}: {a:.2f}°"
+##            )
 
-    roi = image
+        display_results(
+            roi,
+            center,
+            radius,
+            profile,
+            theta,
+            peak_angles,
+            filename
+        )
 
-    config = setup_analysis(
-        roi
-    )
-
-    if config is None:
-        return
-
-    center,radius,threshold = config
-
-    _,binary = cv2.threshold(
-        roi,
-        threshold,
-        255,
-        cv2.THRESH_BINARY_INV
-    )
-
-    theta,profile = angular_profile(
-        binary,
-        center,
-        radius
-    )
-
-    peak_angles = find_peak_angles(
-        theta,
-        profile
-    )
-
-    print()
-
-    display_results(
-        roi,
-        center,
-        radius,
-        profile,
-        theta,
-        peak_angles,
-        filename
-    )
+    print("\nFin del programa")
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
