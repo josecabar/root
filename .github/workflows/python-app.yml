@@ -34,11 +34,10 @@ jobs:
       run: |
         git config --global user.email "action@github.com"
         git config --global user.name "GitHub Action"
-        mkdir -p build
-        copy dist\starshot.exe build\starshot.exe
-        git add build/starshot.exe
-        git commit -m "Add compiled starshot.exe"
-        git push
+        copy dist\starshot.exe starshot.exe
+        git add starshot.exe
+        git commit -m "Add compiled starshot.exe [skip ci]" || true
+        git push || true
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
