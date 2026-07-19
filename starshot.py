@@ -301,19 +301,19 @@ def angular_profile(
 # ==========================================
 
 from scipy.ndimage import gaussian_filter1d, label
-from scipy.optimize import curve_fit
+##from scipy.optimize import curve_fit
 
 
-def gaussian(x, a, x0, sigma, b):
-
-    return (
-        a *
-        np.exp(
-            -((x - x0) ** 2) /
-            (2 * sigma * sigma)
-        )
-        + b
-    )
+##def gaussian(x, a, x0, sigma, b):
+##
+##    return (
+##        a *
+##        np.exp(
+##            -((x - x0) ** 2) /
+##            (2 * sigma * sigma)
+##        )
+##        + b
+##    )
 
 
 def find_peak_angles(
@@ -353,26 +353,15 @@ def find_peak_angles(
         if np.max(peak) <= 0:
             continue
 
+        # Centroide ponderado
+
         try:
 
-            p0 = [
-                np.max(peak),
-                theta[np.argmax(peak)],
-                (theta[-1] - theta[0]) / 4,
-                0
-            ]
+            center = np.sum(
+                theta * peak
+            ) / np.sum(peak)
 
-            popt, _ = curve_fit(
-                gaussian,
-                theta,
-                peak,
-                p0=p0,
-                maxfev=10000
-            )
-
-            centers.append(
-                popt[1]
-            )
+            centers.append(center)
 
         except:
 
