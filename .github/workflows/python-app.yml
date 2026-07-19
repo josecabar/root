@@ -30,14 +30,6 @@ jobs:
       run: |
         pyinstaller --onefile --windowed --name=starshot starshot.py
 
-    - name: Install UPX
-      run: |
-        choco install upx -y
-
-    - name: Compress EXE with UPX
-      run: |
-        upx -9 --force dist\starshot.exe -o starshot.exe
-
     - name: Upload EXE to repository
       run: |
         git config --global user.email "action@github.com"
