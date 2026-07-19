@@ -10,6 +10,8 @@ from PIL import Image
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 
+import os
+
 
 # ==========================================
 # CARGA IMAGEN
@@ -285,27 +287,11 @@ def find_peak_angles(
 
     centers = []
 
-##    plt.figure(figsize=(10,4))
-##    plt.plot(angles, signal)
-##    plt.axhline(
-##        threshold,
-##        color="red"
-##    )
-##    plt.title("Montañas")
-##    plt.show()
-
     for region in range(1, nregions + 1):
         idx = labels == region
 
         theta = angles[idx]
         peak = signal[idx]
-
-
-        print(
-            f"Region {region}: "
-            f"{theta[0]:.2f} - {theta[-1]:.2f}"
-        )
-
 
 
         if len(theta) < 5:
@@ -342,10 +328,6 @@ def find_peak_angles(
             centers.append(
                 theta[np.argmax(peak)]
             )
-
-        print(
-            f"Gauss center = {popt[1]:.2f}"
-        )
 
     centers = np.array(centers)
 
@@ -432,7 +414,8 @@ def display_results(
     radius,
     profile,
     theta,
-    angles
+    angles,
+    filename
 ):
 
     lines = build_lines(
@@ -456,7 +439,7 @@ def display_results(
 
     ax[0].imshow(
         image,
-        cmap="gray"
+        cmap="jet"
     )
 
     circle = plt.Circle(
@@ -601,9 +584,12 @@ def display_results(
         2 * radius_mm
     )
 
+    short_name = os.path.basename(filename)
 
     ax[1].set_title(
-        f"Star Shot\nDiameter = {diameter_mm:.3f} mm"
+        f"{short_name}\n"
+        f"Star Shot\n"
+        f"Diameter = {diameter_mm:.3f} mm"
     )
 
     ax[1].set_xticks([])
@@ -760,23 +746,14 @@ def main():
 
     print()
 
-    for i,a in enumerate(
-        peak_angles
-    ):
-
-        print(
-            f"Haz {i+1}: {a:.2f}°"
-        )
-
-
-
     display_results(
         roi,
         center,
         radius,
         profile,
         theta,
-        peak_angles
+        peak_angles,
+        filename
     )
 
 
