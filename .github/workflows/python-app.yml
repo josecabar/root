@@ -28,11 +28,11 @@ jobs:
     - name: List files (debug)
       run: |
         dir
-        ls -la starshot.py
+        dir starshot.py
         
     - name: Build EXE with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name=starshot "starshot.py"
+        pyinstaller --onefile --windowed --name=starshot starshot.py
 
     - name: Create Release
       uses: actions/create-release@v1
