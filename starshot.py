@@ -492,7 +492,7 @@ def display_results(
             xp,
             yp,
             f"{a:.1f}",
-            color="yellow",
+            color="darkblue",
             fontsize=8
         )
 
