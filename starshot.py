@@ -215,7 +215,7 @@ def angular_profile(
 
             r = radius + dr
 
-            x = cx - r * np.cos(theta)
+            x = cx + r * np.cos(theta)
             y = cy - r * np.sin(theta)
 
             ix = int(round(x))
@@ -391,10 +391,10 @@ def build_lines(center, radius, angles, tolerance=10):
         t1 = np.deg2rad(a)
         t2 = np.deg2rad(angles[idx])
 
-        x1 = cx - radius * np.cos(t1)
+        x1 = cx + radius * np.cos(t1)
         y1 = cy - radius * np.sin(t1)
 
-        x2 = cx - radius * np.cos(t2)
+        x2 = cx + radius * np.cos(t2)
         y2 = cy - radius * np.sin(t2)
 
         lines.append(
@@ -478,7 +478,7 @@ def display_results(
 
         t = np.deg2rad(a)
 
-        xp = center[0] - radius*np.cos(t)
+        xp = center[0] + radius*np.cos(t)
         yp = center[1] - radius*np.sin(t)
 
         ax[0].plot(
@@ -486,14 +486,6 @@ def display_results(
             yp,
             "ro",
             markersize=8
-        )
-
-        ax[0].text(
-            xp,
-            yp,
-            f"{a:.1f}",
-            color="darkblue",
-            fontsize=8
         )
 
     for x1,y1,x2,y2 in lines:
