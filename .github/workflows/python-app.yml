@@ -1,36 +1,41 @@
-name: Build EXE
+name: Build Windows 64-bit EXE
 
 on:
+  push:
+    branches: [ starshot ]
   workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-
-    - uses: actions/checkout@v4
-
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@v3
       with:
-        python-version: "3.11"
+        ref: starshot
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        architecture: 'x64'
 
     - name: Install dependencies
       run: |
-        pip install numpy
-        pip install scipy
-        pip install matplotlib
-        pip install pillow
-        pip install opencv-python
-        pip install pyinstaller
+        python -m pip install --upgrade pip
+        pip install pyinstaller opencv-python numpy matplotlib Pillow scipy
 
-    - name: Build
+    - name: Build EXE with PyInstaller
       run: |
-        pyinstaller --onefile --windowed starshot.py
+        pyinstaller --onefile --windowed --name=starshot ".github/workflows/starshot.py"
 
-    - name: Upload EXE
-      uses: actions/upload-artifact@v4
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        name: starshot-exe
-        path: dist/starshot.exe
+        tag_name: v${{ github.run_number }}
+        release_name: StarShot Windows EXE (Build ${{ github.run_number }})
+        body: "Windows 64-bit executable for StarShot"
+        draft: false
+        prerelease: false
