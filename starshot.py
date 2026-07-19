@@ -103,6 +103,57 @@ def setup_analysis(image):
             cv2.COLOR_GRAY2BGR
         )
 
+        # ---- TEXTO ----
+
+        # fondo gris
+        cv2.rectangle(
+            display,
+            (5, 5),
+            (240, 100),
+            (80, 80, 80),   # gris oscuro
+            -1              # relleno
+        )
+
+        # borde opcional
+        cv2.rectangle(
+            display,
+            (5, 5),
+            (240, 100),
+            (150, 150, 150),
+            1
+        )
+
+        cv2.putText(
+            display,
+            "Click: centro",
+            (10, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            display,
+            "+/W: radio +",
+            (10, 50),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            display,
+            "-/S: radio -",
+            (10, 75),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            2
+        )
+
+        # ---- CIRCULO ----
         cv2.circle(
             display,
             tuple(center),
@@ -170,10 +221,10 @@ def setup_analysis(image):
         elif key == 27:
             return None
 
-        elif key == ord("w"):
+        elif key in (ord("+"), ord("w")):
             radius += 5
 
-        elif key == ord("s"):
+        elif key in (ord("-"), ord("s")):
             radius = max(
                 20,
                 radius-5
@@ -408,6 +459,70 @@ def build_lines(center, radius, angles, tolerance=10):
 # DISPLAY
 # ==========================================
 
+def clip_line_to_image(x1, y1, x2, y2, width, height):
+
+    points = []
+
+    dx = x2 - x1
+    dy = y2 - y1
+
+    # x = 0
+    if abs(dx) > 1e-12:
+        t = (0 - x1) / dx
+        y = y1 + t * dy
+
+        if 0 <= y <= height:
+            points.append((0, y))
+
+    # x = width
+    if abs(dx) > 1e-12:
+        t = (width - x1) / dx
+        y = y1 + t * dy
+
+        if 0 <= y <= height:
+            points.append((width, y))
+
+    # y = 0
+    if abs(dy) > 1e-12:
+        t = (0 - y1) / dy
+        x = x1 + t * dx
+
+        if 0 <= x <= width:
+            points.append((x, 0))
+
+    # y = height
+    if abs(dy) > 1e-12:
+        t = (height - y1) / dy
+        x = x1 + t * dx
+
+        if 0 <= x <= width:
+            points.append((x, height))
+
+    # eliminar duplicados
+    unique = []
+
+    for p in points:
+
+        duplicate = False
+
+        for q in unique:
+
+            if np.hypot(
+                p[0] - q[0],
+                p[1] - q[1]
+            ) < 1e-6:
+
+                duplicate = True
+                break
+
+        if not duplicate:
+            unique.append(p)
+
+    if len(unique) < 2:
+        return None
+
+    return unique[0], unique[1]
+
 def display_results(
     image,
     center,
@@ -442,70 +557,83 @@ def display_results(
         cmap="jet"
     )
 
-    circle = plt.Circle(
-        center,
-        radius,
-        fill=False,
-        color="lime"
-    )
 
-    ax[0].add_patch(circle)
+##    circle = plt.Circle(
+##        center,
+##        radius,
+##        fill=False,
+##        color="lime"
+##    )
+##
+##    ax[0].add_patch(circle)
 
-    star_circle = plt.Circle(
-        (
-            star_center[0],
-            star_center[1]
-        ),
-        star_radius,
-        fill=False,
-        color="cyan",
-        linewidth=3
-    )
+##    star_circle = plt.Circle(
+##        (
+##            star_center[0],
+##            star_center[1]
+##        ),
+##        star_radius,
+##        fill=False,
+##        color="cyan",
+##        linewidth=3
+##    )
+##
+##    ax[0].add_patch(
+##        star_circle
+##    )
 
-    ax[0].add_patch(
-        star_circle
-    )
+##    ax[0].scatter(
+##        star_center[0],
+##        star_center[1],
+##        c="yellow",
+##        s=100,
+##        zorder=10
+##    )
 
-    ax[0].scatter(
-        star_center[0],
-        star_center[1],
-        c="yellow",
-        s=100,
-        zorder=10
-    )
 
-    for a in angles:
+    h, w = image.shape
 
-        t = np.deg2rad(a)
+    for x1, y1, x2, y2 in lines:
 
-        xp = center[0] + radius*np.cos(t)
-        yp = center[1] - radius*np.sin(t)
-
-        ax[0].plot(
-            xp,
-            yp,
-            "ro",
-            markersize=8
+        pts = clip_line_to_image(
+            x1,
+            y1,
+            x2,
+            y2,
+            w-1,
+            h-1
         )
 
-    for x1,y1,x2,y2 in lines:
+        if pts is None:
+            continue
+
+        p1, p2 = pts
 
         ax[0].plot(
-            [x1,x2],
-            [y1,y2],
+            [p1[0], p2[0]],
+            [p1[1], p2[1]],
             'r',
             lw=2
         )
-
-    ax[0].scatter(
-        center[0],
-        center[1],
-        c='yellow'
-    )
+    
+##    ax[0].scatter(
+##        center[0],
+##        center[1],
+##        c='yellow'
+##    )
+        
+    short_name = os.path.basename(filename)
 
     ax[0].set_title(
-        "Rectas detectadas"
+        f"{short_name}\n"
+        "Star Shot With Spokes"
     )
+
+    
+    ax[0].set_xticks([])
+    ax[0].set_yticks([])
+
+
 
     # ==========================================
     # PANEL DERECHO (TIPO SUNCHECK)
@@ -576,11 +704,8 @@ def display_results(
         2 * radius_mm
     )
 
-    short_name = os.path.basename(filename)
-
     ax[1].set_title(
-        f"{short_name}\n"
-        f"Star Shot\n"
+        f"Star Shot Optimal Circle\n"
         f"Diameter = {diameter_mm:.3f} mm"
     )
 
@@ -704,10 +829,12 @@ def main():
     image = load_image(
         filename
     )
+##
+##    roi = select_roi(
+##        image
+##    )
 
-    roi = select_roi(
-        image
-    )
+    roi = image
 
     config = setup_analysis(
         roi
