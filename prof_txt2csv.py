@@ -46,7 +46,7 @@ def generar_csv_haz(
         if line.endswith("Analysis"):
 
             output.append(
-                line + ",,,"
+                line + ",,"
             )
             continue
 
