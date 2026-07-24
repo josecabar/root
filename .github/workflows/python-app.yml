@@ -1,44 +1,34 @@
-name: Build Windows 64-bit EXE
+name: Build prof_txt2csv
 
 on:
-  push:
-    branches: [ starshot ]
   workflow_dispatch:
 
 jobs:
   build:
+
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
-      with:
-        ref: starshot
 
-    - name: Set up Python 3.11 (64-bit)
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        architecture: 'x64'
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install -r requirements.txt
-    - name: Build EXE with PyInstaller
-      run: |
-        pyinstaller --onefile --windowed --name=starshot starshot.py
-    - name: Upload EXE to repository
-      run: |
-        git config --global user.email "action@github.com"
-        git config --global user.name "GitHub Action"
-        copy dist\starshot.exe starshot.exe
-        git add starshot.exe
-        git commit -m "Add compiled starshot.exe [skip ci]" || true
-        git push || true
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: starshot-exe
-        path: dist/starshot.exe
-        retention-days: 90
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Build EXE
+        run: |
+          pyinstaller --onefile --windowed prof_txt2csv.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prof_txt2csv_windows64
+          path: dist/*.exe
