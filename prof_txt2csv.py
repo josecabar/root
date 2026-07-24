@@ -3,10 +3,155 @@
 import os
 from tkinter import Tk
 from tkinter.filedialog import askdirectory
+from tkinter.filedialog import askopenfilename
+
+from pathlib import Path
+import re
+
+def generar_csv_haz(
+    lines,
+    haz_idx,
+    prm_name,
+    txt_file
+):
+
+    csv_name = os.path.join(
+        os.path.dirname(txt_file),
+        Path(prm_name).stem + ".csv"
+    )
+
+    output = []
+
+    start = next(
+        i for i, l in enumerate(lines)
+        if l.strip().startswith(
+            "X Axis Analysis"
+        )
+    )
+
+    end = next(
+        i for i, l in enumerate(lines)
+        if l.strip().startswith(
+            "Measured Data:"
+        )
+    )
+
+    for line in lines[start:end]:
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if line.endswith("Analysis"):
+
+            output.append(
+                line + ",,,"
+            )
+            continue
+
+        parts = [
+            p.strip()
+            for p in line.split("\t")
+        ]
+
+        print(parts)
+
+        parts = [
+            p for p in parts
+            if p != ""
+        ]
+
+        if len(parts) < 3:
+            continue
+
+        nombre = parts[0]
+        unidad = parts[1]
+
+        columna = haz_idx + 3
+
+        if columna >= len(parts):
+            continue
+
+        valor = parts[columna]
+
+        try:
+            valor = float(
+                valor.replace(",", ".")
+            )
+
+            valor = f"{valor:.3f}"
+
+        except ValueError:
+            pass
+        
+        if (
+            nombre.startswith("Penumbra")
+            and unidad == "cm"
+        ):
+            try:
+                valor = (
+                    float(
+                        valor.replace(",", ".")
+                    ) * 10
+                )
+                valor = f"{valor:.4f}"
+                unidad = "mm"
+            except:
+                pass
+
+        output.append(
+            f"{nombre},{unidad},{valor}"
+        )
+
+    with open(
+        csv_name,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        f.write(
+            "\n".join(output)
+        )
+
+    print(
+        f"[OK] {csv_name}"
+    )
+
+def obtener_prm_names(lines):
+
+    filename_line = None
+
+    for linea in lines:
+
+        if "Filename" in linea:
+
+            filename_line = linea
+            break
+
+    if filename_line is None:
+
+        return []
+
+    prm_names = []
+
+    rutas = re.findall(
+        r'[^\\/\t]+\.(?:prm|PRM)',
+        filename_line
+    )
+
+    for ruta in rutas:
+
+        prm_names.append(
+            Path(ruta).name
+        )
+
+    print("\nPRM encontrados:")
+    print(prm_names)
+
+    return prm_names
 
 def profiler_txt_to_csv(txt_file):
-
-    csv_file = os.path.splitext(txt_file)[0] + ".csv"
 
     with open(
         txt_file,
@@ -17,159 +162,83 @@ def profiler_txt_to_csv(txt_file):
 
         lines = f.readlines()
 
-    # --------------------------------------
-    # Buscar inicio
-    # --------------------------------------
+    prm_names = obtener_prm_names(lines)
 
-    start = None
-
-    for i, line in enumerate(lines):
-
-        if line.strip() == "X Axis Analysis":
-
-            start = i
-            break
-
-    if start is None:
+    if not prm_names:
 
         raise ValueError(
-            "No se encontró 'X Axis Analysis'"
+            "No se encontraron archivos PRM en la línea Filename"
         )
 
-    # --------------------------------------
-    # Buscar final
-    # --------------------------------------
+    output_files = []
 
-    end = len(lines)
+    # TXT individual
+    if len(prm_names) == 1:
 
-    for i, line in enumerate(lines):
+        generar_csv_haz(
+            lines,
+            0,
+            prm_names[0],
+            txt_file
+        )
 
-        if line.startswith("Measured Data:"):
-
-            end = i
-            break
-
-    lines = lines[start:end]
-
-    output = []
-
-    # --------------------------------------
-    # Procesar
-    # --------------------------------------
-
-    for line in lines:
-
-        line = line.strip()
-
-        if not line:
-            continue
-
-        # Secciones
-        if line.endswith("Analysis"):
-
-            output.append(
-                f"{line},,"
+        output_files.append(
+            str(
+                Path(
+                    prm_names[0]
+                ).with_suffix(".csv")
             )
+        )
 
-            continue
+    # TXT multihaz
+    else:
 
-        parts = [
-            p.strip()
-            for p in line.split("\t")
-            if p.strip()
-        ]
-
-        if len(parts) < 3:
-            continue
-
-        parametro = parts[0]
-        unidad = parts[1]
-        valor = parts[2]
-
-        # Penumbra cm -> mm
-        if (
-            parametro.startswith("Penumbra")
-            and unidad == "cm"
+        for haz_idx, prm_name in enumerate(
+            prm_names
         ):
 
-            try:
+            generar_csv_haz(
+                lines,
+                haz_idx,
+                prm_name,
+                txt_file
+            )
 
-                valor = (
-                    float(valor) * 10
+            output_files.append(
+                str(
+                    Path(
+                        prm_name
+                    ).with_suffix(".csv")
                 )
+            )
 
-                valor = f"{valor:.4f}"
-
-                unidad = "mm"
-
-            except ValueError:
-
-                pass
-
-        output.append(
-            f"{parametro},{unidad},{valor}"
-        )
-
-    # --------------------------------------
-    # Guardar CSV
-    # --------------------------------------
-
-    with open(
-        csv_file,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        f.write(
-            "\n".join(output)
-        )
-
-    return csv_file
-
-
+    return output_files
 
 if __name__ == "__main__":
 
     root = Tk()
     root.withdraw()
 
-    folder = askdirectory(
-        title="Selecciona carpeta con archivos TXT del Profiler"
+    txt_file = askopenfilename(
+        title="Selecciona TXT exportado por IC Profiler",
+        filetypes=[
+            ("TXT", "*.txt"),
+            ("Todos", "*.*")
+        ]
     )
 
     root.destroy()
 
-    if folder:
+if txt_file:
 
-        txt_files = [
-            f for f in os.listdir(folder)
-            if f.lower().endswith(".txt")
-        ]
+    archivos = profiler_txt_to_csv(
+        txt_file
+    )
 
-        for file_name in txt_files:
+    print(
+        "\nCSV generados:"
+    )
 
-            txt_file = os.path.join(
-                folder,
-                file_name
-            )
+    for f in archivos:
 
-            try:
-
-                csv_file = profiler_txt_to_csv(
-                    txt_file
-                )
-
-                print(
-                    f"[OK] {file_name} -> "
-                    f"{os.path.basename(csv_file)}"
-                )
-
-            except Exception as e:
-
-                print(
-                    f"[ERROR] {file_name}: {e}"
-                )
-
-        print(
-            "\nConversión finalizada."
-        )
+        print(f)
