@@ -1,6 +1,5 @@
 numpy
+pandas
 scipy
 matplotlib
-pillow
-opencv-python
-pyinstaller
+openpyxl
