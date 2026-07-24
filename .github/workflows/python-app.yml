@@ -1,34 +1,39 @@
-name: Build prof_txt2csv
+name: Build FFF Analyzer
 
 on:
   workflow_dispatch:
 
 jobs:
+
   build:
 
     runs-on: windows-latest
 
     steps:
 
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
 
-      - name: Install PyInstaller
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
 
-      - name: Build EXE
-        run: |
-          pyinstaller --onefile --windowed prof_txt2csv.py
+    - name: Build executable
+      run: |
+        pyinstaller ^
+          --onefile ^
+          --windowed ^
+          pruebaFFF.py
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: prof_txt2csv_windows64
-          path: dist/*.exe
+    - name: Upload executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: FFFAnalyzer-Win64
+        path: dist/*.exe
