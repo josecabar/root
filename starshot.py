@@ -322,87 +322,92 @@ def find_peak_angles(
     user_threshold
 ):
 
-##    signal = gaussian_filter1d(
-##        profile.astype(float),
-##        sigma=2
-##    )
+    signal = gaussian_filter1d(
+        profile.astype(float),
+        sigma=2
+    )
 
-    signal = profile
-    
+    angles_ext = np.concatenate(
+        [angles, angles + 360]
+    )
+
+    signal_ext = np.concatenate(
+        [signal, signal]
+    )
+
     threshold = (
         np.min(signal)
         + np.max(signal)
     ) / 2
 
-    # detectar montañas
-    mask = signal < threshold
-    
+    # valles
+    mask = signal_ext < threshold
+
     labels, nregions = label(mask)
 
-    centers = []
+    regions = []
 
     for region in range(1, nregions + 1):
+
         idx = labels == region
 
-        theta = angles[idx]
-        peak = signal[idx]
+        theta = angles_ext[idx]
+        peak  = signal_ext[idx]
 
-
-        if len(theta) < 5:
+        if len(theta) < 20:
             continue
 
-
-        # invertir para que el valle pase a ser un pico
         peak = np.max(peak) - peak
 
         if np.max(peak) <= 0:
             continue
 
-        # Centroide ponderado
+        regions.append({
+            "theta": theta,
+            "peak": peak
+        })
 
-        try:
+    # -------------------------------------
+    # Quedarse con regiones cuyo centro
+    # está entre 0° y 360°
+    # -------------------------------------
 
-            center = np.sum(
-                theta * peak
-            ) / np.sum(peak)
+    valid_regions = []
 
-            centers.append(center)
+    for r in regions:
 
-        except:
+        center_region = np.mean(r["theta"])
 
-            centers.append(
-                theta[np.argmax(peak)]
-            )
+        if 180 <= center_region < 540:
 
-    centers = np.array(centers)
+            valid_regions.append(r)
 
-    centers = np.sort(centers)
+    regions = valid_regions
+    
+    # -------------------------------------
+    # Centroides
+    # -------------------------------------
 
-    # fusionar la montaña que cruza 0°/360°
+    centers = []
 
-    if (
-        len(centers) > 1
-        and centers[0] < 20
-        and centers[-1] > 340
-    ):
+    for r in regions:
 
-        merged = (
-            centers[0]
-            + (centers[-1] - 360)
-        ) / 2
-
-        if merged < 0:
-            merged += 360
-
-        centers = centers[1:-1]
-
-        centers = np.insert(
-            centers,
-            0,
-            merged
+        center = np.sum(
+            r["theta"] * r["peak"]
+        ) / np.sum(
+            r["peak"]
         )
 
+        centers.append(
+            center % 360
+        )
+
+    centers = np.sort(
+        np.array(centers)
+    )
+
     return centers
+
 # ==========================================
 # RECTAS OPUESTAS
 # ==========================================
