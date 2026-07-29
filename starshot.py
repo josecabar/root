@@ -285,7 +285,8 @@ def angular_profile(
         if len(samples) > 0:
 
             values.append(
-                np.mean(samples)
+##                np.mean(samples)
+                np.percentile(samples, 10)
             )
 
         else:
@@ -315,25 +316,27 @@ from scipy.ndimage import gaussian_filter1d, label
 ##        + b
 ##    )
 
-
 def find_peak_angles(
     angles,
-    profile
+    profile,
+    user_threshold
 ):
 
-    signal = gaussian_filter1d(
-        profile.astype(float),
-        sigma=2
-    )
+##    signal = gaussian_filter1d(
+##        profile.astype(float),
+##        sigma=2
+##    )
 
+    signal = profile
+    
     threshold = (
         np.min(signal)
         + np.max(signal)
     ) / 2
 
     # detectar montañas
-    mask = signal > threshold
-
+    mask = signal < threshold
+    
     labels, nregions = label(mask)
 
     centers = []
@@ -348,7 +351,9 @@ def find_peak_angles(
         if len(theta) < 5:
             continue
 
-        peak = peak - np.min(peak)
+
+        # invertir para que el valle pase a ser un pico
+        peak = np.max(peak) - peak
 
         if np.max(peak) <= 0:
             continue
@@ -623,7 +628,6 @@ def display_results(
     ax[0].set_yticks([])
 
 
-
     # ==========================================
     # PANEL DERECHO (TIPO SUNCHECK)
     # ==========================================
@@ -838,31 +842,69 @@ def main():
             continue
 
         center, radius, threshold = config
+        
+        center = np.array(center, dtype=float)
 
-        _, binary = cv2.threshold(
-            roi,
-            threshold,
-            255,
-            cv2.THRESH_BINARY_INV
-        )
+        for i in range(10):
+
+            theta, profile = angular_profile(
+                roi,
+                center,
+                radius
+            )
+
+            peak_angles = find_peak_angles(
+                theta,
+                profile,
+                threshold
+            )
+
+            lines = build_lines(
+                center,
+                radius,
+                peak_angles
+            )
+
+            star_center, star_radius = (
+                calculate_starshot_center(
+                    lines,
+                    center
+                )
+            )
+
+            shift = np.linalg.norm(
+                np.array(star_center) -
+                center
+            )
+
+            print(
+                f"Iteración {i+1}: "
+                f"desplazamiento = {shift:.2f} px"
+            )
+
+            center = np.array(
+                star_center
+            )
+
+            if shift < 0.1:   # tolerancia en píxeles
+                break
+
+        # ======================================
+        # Recalcular una última vez usando
+        # el centro convergido
+        # ======================================
 
         theta, profile = angular_profile(
-            binary,
+            roi,
             center,
             radius
         )
 
         peak_angles = find_peak_angles(
             theta,
-            profile
+            profile,
+            threshold
         )
-
-##        print("\nÁngulos detectados:")
-##
-##        for i, a in enumerate(peak_angles):
-##            print(
-##                f"Haz {i+1}: {a:.2f}°"
-##            )
 
         display_results(
             roi,
@@ -873,6 +915,11 @@ def main():
             peak_angles,
             filename
         )
+
+    print(
+        "Centro final:",
+        center
+    )
 
     print("\nFin del programa")
 
