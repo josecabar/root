@@ -1,4 +1,4 @@
-name: Build Windows 64-bit EXE
+name: Build starshot.exe
 
 on:
   push:
