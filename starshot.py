@@ -78,14 +78,88 @@ def select_roi(image):
 
 def setup_analysis(image):
 
-    center = [
-        image.shape[1]//2,
-        image.shape[0]//2
-    ]
+    # ==================================
+    # Centro automático inicial
+    # ==================================
+
+    thr = np.percentile(
+        image,
+        0.5
+    )
+
+    mask = (
+        image <= thr
+    ).astype(np.uint8)
+
+    num_labels, labels, stats, centroids = (
+        cv2.connectedComponentsWithStats(
+            mask,
+            connectivity=8
+        )
+    )
+
+    cx_img = image.shape[1] / 2
+    cy_img = image.shape[0] / 2
+
+    best_label = None
+    best_score = np.inf
+
+    for i in range(1, num_labels):
+
+        area = stats[
+            i,
+            cv2.CC_STAT_AREA
+        ]
+
+        # descartar ruido
+        if area < 20:
+            continue
+
+        cx, cy = centroids[i]
+
+        dist = np.hypot(
+            cx - cx_img,
+            cy - cy_img
+        )
+
+        # favorecer islas grandes
+        score = dist / np.sqrt(area)
+
+        if score < best_score:
+
+            best_score = score
+            best_label = i
+
+    if best_label is not None:
+
+        cx, cy = centroids[
+            best_label
+        ]
+
+        center = [
+            int(round(cx)),
+            int(round(cy))
+        ]
+
+##        print(
+##            f"Centroide inicial: "
+##            f"({center[0]}, {center[1]})"
+##        )
+
+    else:
+
+        center = [
+            image.shape[1] // 2,
+            image.shape[0] // 2
+        ]
+
+    # ==================================
+    # Parámetros iniciales
+    # ==================================
 
     radius = min(
         image.shape
-    )//4
+    ) // 4
 
     threshold = 120
 
@@ -103,18 +177,16 @@ def setup_analysis(image):
             cv2.COLOR_GRAY2BGR
         )
 
-        # ---- TEXTO ----
-
-        # fondo gris
+        # fondo panel
         cv2.rectangle(
             display,
             (5, 5),
             (240, 100),
-            (80, 80, 80),   # gris oscuro
-            -1              # relleno
+            (80, 80, 80),
+            -1
         )
 
-        # borde opcional
+        # borde panel
         cv2.rectangle(
             display,
             (5, 5),
@@ -153,19 +225,18 @@ def setup_analysis(image):
             2
         )
 
-        # ---- CIRCULO ----
         cv2.circle(
             display,
             tuple(center),
             radius,
-            (0,255,0),
+            (0, 255, 0),
             2
         )
 
         cv2.drawMarker(
             display,
             tuple(center),
-            (0,0,255),
+            (0, 0, 255),
             cv2.MARKER_CROSS,
             20,
             2
@@ -176,12 +247,12 @@ def setup_analysis(image):
             display
         )
 
-    def mouse(event,x,y,flags,param):
+    def mouse(event, x, y, flags, param):
 
         if event == cv2.EVENT_LBUTTONDOWN:
 
-            center[0]=x
-            center[1]=y
+            center[0] = x
+            center[1] = y
 
             redraw()
 
@@ -227,12 +298,12 @@ def setup_analysis(image):
         elif key in (ord("-"), ord("s")):
             radius = max(
                 20,
-                radius-5
+                radius - 5
             )
 
     cv2.destroyAllWindows()
 
-    return center,radius,threshold
+    return center, radius, threshold
 
 
 # ==========================================
@@ -712,28 +783,28 @@ def display_results(
 
     
 
-    print()
-    print("================================")
-    print("STARSHOT")
-    print("================================")
-
-    print(
-        f"Center X = {star_center[0]:.2f} px"
-    )
-
-    print(
-        f"Center Y = {star_center[1]:.2f} px"
-    )
-
-    print(
-        f"Radius = {radius_mm:.3f} mm"
-    )
-
-    print(
-        f"Diameter = {diameter_mm:.3f} mm"
-    )
-
-    print("================================")
+##    print()
+##    print("================================")
+##    print("STARSHOT")
+##    print("================================")
+##
+##    print(
+##        f"Center X = {star_center[0]:.2f} px"
+##    )
+##
+##    print(
+##        f"Center Y = {star_center[1]:.2f} px"
+##    )
+##
+##    print(
+##        f"Radius = {radius_mm:.3f} mm"
+##    )
+##
+##    print(
+##        f"Diameter = {diameter_mm:.3f} mm"
+##    )
+##
+##    print("================================")
 
     
     plt.show()
@@ -882,10 +953,10 @@ def main():
                 center
             )
 
-            print(
-                f"Iteración {i+1}: "
-                f"desplazamiento = {shift:.2f} px"
-            )
+##            print(
+##                f"Iteración {i+1}: "
+##                f"desplazamiento = {shift:.2f} px"
+##            )
 
             center = np.array(
                 star_center
@@ -921,12 +992,12 @@ def main():
             filename
         )
 
-    print(
-        "Centro final:",
-        center
-    )
-
-    print("\nFin del programa")
+##    print(
+##        "Centro final:",
+##        center
+##    )
+##
+##    print("\nFin del programa")
 
 
 if __name__ == "__main__":
