@@ -285,8 +285,8 @@ def angular_profile(
         if len(samples) > 0:
 
             values.append(
-##                np.mean(samples)
-                np.percentile(samples, 10)
+                np.mean(samples)
+##                np.percentile(samples, 10)
             )
 
         else:
