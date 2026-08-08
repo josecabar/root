@@ -1047,511 +1047,510 @@ def process_file(
         )
     )
 
-    if return_fig:
 
 
-        fig, axs = plt.subplots(
-            2,
-            2,
-            figsize=(16, 10)
-        )
+    fig, axs = plt.subplots(
+        2,
+        2,
+        figsize=(16, 10)
+    )
 
-        axes_map = {
-            "X": axs[0, 0],
-            "Y": axs[0, 1],
-            "PD": axs[1, 0],
-            "ND": axs[1, 1]
-        }
+    axes_map = {
+        "X": axs[0, 0],
+        "Y": axs[0, 1],
+        "PD": axs[1, 0],
+        "ND": axs[1, 1]
+    }
 
-        for eje in ["X", "Y", "PD", "ND"]:
+    for eje in ["X", "Y", "PD", "ND"]:
+
+        if es_fff:
+
+            data = analyze_fogliata_linear(
+                net_doses,
+                eje,
+                field_size_cm,
+                depth_cm=4.08
+            )
+
+            res = data["results"]
+
+        else:
+
+            data = analyze_profile_geometry(
+                net_doses,
+                eje
+            )
+
+            res = analyze_flat_beam(
+                data, eje
+            )
+
+        if eje == "X":
+
+            resultados_export["X"] = {
+                **res
+            }
+            
+        if eje == "Y":
+
+            resultados_export["Y"] = {
+                **res
+            }
+
+        if return_fig:
+
+            # ==========================================
+            # GRAFICA 2x2
+            # ==========================================
+                    
+            ax = axes_map[eje]
+
+            x = data["x"]
+            y = data["y"]
+            f = data["f"]
+
+            # =========================
+            # Datos
+            # =========================
+
+            l20 = data["l20"]
+            l50 = data["l50"]
+            l80 = data["l80"]
+
+            r20 = data["r20"]
+            r50 = data["r50"]
+            r80 = data["r80"]
+
+
+            fr_left = data["fr_left"]
+            fr_right = data["fr_right"]
+
+            field_size = data["field_size"]
+            field_region = data["field_region"]
+            field_center = data["field_center"]
+
+            pen_left = data["pen_left"]
+            pen_right = data["pen_right"]
+            
+
+
+            # =========================
+            # Perfil completo
+            # =========================
+
+            x_plot = np.linspace(
+                np.min(x),
+                np.max(x),
+                5000
+            )
+
+            y_plot = f(x_plot)
+
+
+
+            A_l = data["A_l"]
+            B_l = data["B_l"]
+            X0_l = data["X0_l"]
+            C_l = data["C_l"]
+
+            A_r = data["A_r"]
+            B_r = data["B_r"]
+            X0_r = data["X0_r"]
+            C_r = data["C_r"]
+
+            x_l = data["x_l"]
+            y_l = data["y_l"]
+
+            x_r = data["x_r"]
+            y_r = data["y_r"]
+
+            y_atan_l = atan_edge(
+                x_plot,
+                A_l,
+                B_l,
+                X0_l,
+                C_l
+            )
+
+            y_atan_r = atan_edge(
+                x_plot,
+                A_r,
+                B_r,
+                X0_r,
+                C_r
+            )
+            
+            # =====================
+            # Left atan fit
+            # =====================
+
+            mask_plot_l = (
+                (x_plot >= np.min(x_l))
+                &
+                (x_plot <= np.max(x_l))
+            )
+
+            ax.plot(
+                x_plot[mask_plot_l],
+                y_atan_l[mask_plot_l],
+                color="darkgreen",
+                linestyle="--",
+                linewidth=0.8,
+                alpha=0.8,
+                zorder = 50
+            )
+
+            
+
+
+            # =====================
+            # Right atan fit
+            # =====================
+
+            mask_plot_r = (
+                (x_plot >= np.min(x_r))
+                &
+                (x_plot <= np.max(x_r))
+            )
+
+            ax.plot(
+                x_plot[mask_plot_r],
+                y_atan_r[mask_plot_r],
+                color="darkgreen",
+                linestyle="--",
+                linewidth=0.8,
+                alpha=0.8,
+                zorder = 50
+            )
+
+
+            # Curva completa naranja
+
+            ax.plot(
+                x_plot,
+                y_plot,
+                color="darkorange",
+                lw=1.5
+            )
+
+    ##        ax.scatter(
+    ##            x,
+    ##            y,
+    ##            color="black",
+    ##            s=8,
+    ##            alpha=0.6,
+    ##            zorder=5
+    ##        )
+
+            # Región de campo (verde)
+
+            mask_fr = (
+                (x_plot >= fr_left)
+                &
+                (x_plot <= fr_right)
+            )
+
+            ax.plot(
+                x_plot[mask_fr],
+                y_plot[mask_fr],
+                color="forestgreen",
+                lw=1.5
+            )
+            
+            # =========================
+            # Penumbra (20%-80%)
+            # =========================
+
+            for v in [l20, l80, r80, r20]:
+
+                ax.plot(
+                    [v, v],
+                    [0, 100],
+                    color="royalblue",
+                    ls="--",
+                    lw=1.5
+                )
+
+            # =========================
+            # Field Region
+            # =========================
+
+            y_top = np.max(y)
+
+            ax.plot(
+                [fr_left, fr_left],
+                [80, y_top],
+                color="green",
+                ls="--",
+                lw=1.5
+            )
+
+            ax.plot(
+                [fr_right, fr_right],
+                [80, y_top],
+                color="green",
+                ls="--",
+                lw=1.5
+            )
+
+            # =========================
+            # F. Size
+            # =========================
+
+            ax.annotate(
+                "",
+                xy=(l50, 50),
+                xytext=(r50, 50),
+                arrowprops=dict(
+                    arrowstyle="<->",
+                    color="black",
+                    lw=1.5
+                )
+            )
+
+            ax.text(
+                0,
+                53,
+                f"F. Size {field_size:.2f} mm",
+                ha="center",
+                fontsize=8
+            )
+
+            # =========================
+            # F. Region
+            # =========================
+
+            ax.annotate(
+                "",
+                xy=(fr_left, 90),
+                xytext=(fr_right, 90),
+                arrowprops=dict(
+                    arrowstyle="<->",
+                    color="black",
+                    lw=1.5
+                )
+            )
+
+            ax.text(
+                0,
+                93,
+                f"F. Region {field_region:.2f} mm",
+                ha="center",
+                fontsize=8
+            )
 
             if es_fff:
 
-                data = analyze_fogliata_linear(
-                    net_doses,
-                    eje,
-                    field_size_cm,
-                    depth_cm=4.08
+
+                # =========================
+                # Slope points
+                # =========================
+            
+
+                x1_l = data["x1_l"]
+                x2_l = data["x2_l"]
+
+                x1_r = data["x1_r"]
+                x2_r = data["x2_r"]
+
+                D1_l = data["D1_l"]
+                D2_l = data["D2_l"]
+
+                D1_r = data["D1_r"]
+                D2_r = data["D2_r"]
+                    
+                ax.scatter(
+                    [x1_l, x2_l, x1_r, x2_r],
+                    [D1_l, D2_l, D1_r, D2_r],
+                    color="royalblue",
+                    s=40,
+                    zorder=2
                 )
 
-                res = data["results"]
+                ax.plot(
+                    [x1_l, x2_l],
+                    [D1_l, D2_l],
+                    color="red",
+                    linestyle="--",
+                    lw=1.5
+                )
+
+                ax.plot(
+                    [x1_r, x2_r],
+                    [D1_r, D2_r],
+                    color="red",
+                    linestyle="--",
+                    lw=1.5
+                )
+
+                # =========================
+                # Gaussian plot
+                # =========================
+
+                A_fit = data["A_fit"]
+                mu_fit = data["Mu_fit"]
+                sigma_fit = data["Sigma_fit"]
+                C_fit = data["C_fit"]
+
+                mask_gauss = (
+                    (x_plot >= l20)
+                    &
+                    (x_plot <= r20)
+                )
+
+                y_gauss = gaussian(
+                    x_plot,
+                    A_fit,
+                    mu_fit,
+                    sigma_fit,
+                    C_fit
+                )
+
+                ax.plot(
+                    x_plot[mask_gauss],
+                    y_gauss[mask_gauss],
+                    color="#b0b7ff",
+                    linestyle=":",
+                    linewidth=1.5,
+                    alpha=0.9
+                )
+
+
+                # =========================
+                # Cuadro izquierdo
+                # =========================
+
+                txt_left = (
+                    f"Gaussian Offset = {res['GaussianOffset']:.2f} mm\n"
+                    f"Left Penumbra = {pen_left:.2f} mm\n"
+                    f"Left Slope = {res['SlopeLeft']:.4f} mm⁻¹\n"
+                    f"Slope Avg = {res['SlopeAvg']:.4f} mm⁻¹\n"
+                    f"Unflatness = {res['Unflatness']:.3f}"
+                )
+
+                ax.text(
+                    -0.05,
+                    1.1,
+                    txt_left,
+                    transform=ax.transAxes,
+                    va="top",
+                    zorder=50,
+                    fontsize=8,
+                    bbox=dict(
+                        facecolor="wheat",
+                        alpha=0.90
+                    )
+                )
+
+                # =========================
+                # Cuadro derecho
+                # =========================
+
+                txt_right = (
+                    f"Beam Center = {field_center:.2f} mm\n"
+                    f"Right Penumbra = {pen_right:.2f} mm\n"
+                    f"Right Slope = {res['SlopeRight']:.4f} mm⁻¹\n"
+                    f"Symmetry = {res['Symmetry']:.2f} %\n"
+                    f"Peak Position = {res['PeakPosition']:.2f} mm"
+                )
+                ax.text(
+                    0.68,
+                    1.1,
+                    txt_right,
+                    transform=ax.transAxes,
+                    va="top",
+                    fontsize=8,
+                    zorder=50,
+                    bbox=dict(
+                        facecolor="wheat",
+                        alpha=0.90
+                    )
+                )
+
 
             else:
 
-                data = analyze_profile_geometry(
-                    net_doses,
-                    eje
-                )
-
-                res = analyze_flat_beam(
-                    data, eje
-                )
-
-            if eje == "X":
-
-                resultados_export["X"] = {
-                    **res
-                }
-                
-            if eje == "Y":
-
-                resultados_export["Y"] = {
-                    **res
-                }
-
-            if return_fig:
-
-                # ==========================================
-                # GRAFICA 2x2
-                # ==========================================
-                        
-                ax = axes_map[eje]
-
-                x = data["x"]
-                y = data["y"]
-                f = data["f"]
 
                 # =========================
-                # Datos
+                # Cuadro izquierdo
                 # =========================
 
-                l20 = data["l20"]
-                l50 = data["l50"]
-                l80 = data["l80"]
-
-                r20 = data["r20"]
-                r50 = data["r50"]
-                r80 = data["r80"]
-
-
-                fr_left = data["fr_left"]
-                fr_right = data["fr_right"]
-
-                field_size = data["field_size"]
-                field_region = data["field_region"]
-                field_center = data["field_center"]
-
-                pen_left = data["pen_left"]
-                pen_right = data["pen_right"]
-                
-
-
-                # =========================
-                # Perfil completo
-                # =========================
-
-                x_plot = np.linspace(
-                    np.min(x),
-                    np.max(x),
-                    5000
-                )
-
-                y_plot = f(x_plot)
-
-
-
-                A_l = data["A_l"]
-                B_l = data["B_l"]
-                X0_l = data["X0_l"]
-                C_l = data["C_l"]
-
-                A_r = data["A_r"]
-                B_r = data["B_r"]
-                X0_r = data["X0_r"]
-                C_r = data["C_r"]
-
-                x_l = data["x_l"]
-                y_l = data["y_l"]
-
-                x_r = data["x_r"]
-                y_r = data["y_r"]
-
-                y_atan_l = atan_edge(
-                    x_plot,
-                    A_l,
-                    B_l,
-                    X0_l,
-                    C_l
-                )
-
-                y_atan_r = atan_edge(
-                    x_plot,
-                    A_r,
-                    B_r,
-                    X0_r,
-                    C_r
-                )
-                
-                # =====================
-                # Left atan fit
-                # =====================
-
-                mask_plot_l = (
-                    (x_plot >= np.min(x_l))
-                    &
-                    (x_plot <= np.max(x_l))
-                )
-
-                ax.plot(
-                    x_plot[mask_plot_l],
-                    y_atan_l[mask_plot_l],
-                    color="darkgreen",
-                    linestyle="--",
-                    linewidth=0.8,
-                    alpha=0.8,
-                    zorder = 50
-                )
-
-                
-
-
-                # =====================
-                # Right atan fit
-                # =====================
-
-                mask_plot_r = (
-                    (x_plot >= np.min(x_r))
-                    &
-                    (x_plot <= np.max(x_r))
-                )
-
-                ax.plot(
-                    x_plot[mask_plot_r],
-                    y_atan_r[mask_plot_r],
-                    color="darkgreen",
-                    linestyle="--",
-                    linewidth=0.8,
-                    alpha=0.8,
-                    zorder = 50
-                )
-
-
-                # Curva completa naranja
-
-                ax.plot(
-                    x_plot,
-                    y_plot,
-                    color="darkorange",
-                    lw=1.5
-                )
-
-        ##        ax.scatter(
-        ##            x,
-        ##            y,
-        ##            color="black",
-        ##            s=8,
-        ##            alpha=0.6,
-        ##            zorder=5
-        ##        )
-
-                # Región de campo (verde)
-
-                mask_fr = (
-                    (x_plot >= fr_left)
-                    &
-                    (x_plot <= fr_right)
-                )
-
-                ax.plot(
-                    x_plot[mask_fr],
-                    y_plot[mask_fr],
-                    color="forestgreen",
-                    lw=1.5
-                )
-                
-                # =========================
-                # Penumbra (20%-80%)
-                # =========================
-
-                for v in [l20, l80, r80, r20]:
-
-                    ax.plot(
-                        [v, v],
-                        [0, 100],
-                        color="royalblue",
-                        ls="--",
-                        lw=1.5
-                    )
-
-                # =========================
-                # Field Region
-                # =========================
-
-                y_top = np.max(y)
-
-                ax.plot(
-                    [fr_left, fr_left],
-                    [80, y_top],
-                    color="green",
-                    ls="--",
-                    lw=1.5
-                )
-
-                ax.plot(
-                    [fr_right, fr_right],
-                    [80, y_top],
-                    color="green",
-                    ls="--",
-                    lw=1.5
-                )
-
-                # =========================
-                # F. Size
-                # =========================
-
-                ax.annotate(
-                    "",
-                    xy=(l50, 50),
-                    xytext=(r50, 50),
-                    arrowprops=dict(
-                        arrowstyle="<->",
-                        color="black",
-                        lw=1.5
-                    )
+                txt_left = (
+                    f"Left Penumbra = {pen_left:.2f} mm\n"
+                    f"Flatness = {res['Flatness']:.2f} %"
                 )
 
                 ax.text(
-                    0,
-                    53,
-                    f"F. Size {field_size:.2f} mm",
-                    ha="center",
-                    fontsize=8
-                )
-
-                # =========================
-                # F. Region
-                # =========================
-
-                ax.annotate(
-                    "",
-                    xy=(fr_left, 90),
-                    xytext=(fr_right, 90),
-                    arrowprops=dict(
-                        arrowstyle="<->",
-                        color="black",
-                        lw=1.5
+                    -0.05,
+                    1.1,
+                    txt_left,
+                    transform=ax.transAxes,
+                    va="top",
+                    zorder=50,
+                    fontsize=8,
+                    bbox=dict(
+                        facecolor="wheat",
+                        alpha=0.90
                     )
                 )
 
+                # =========================
+                # Cuadro derecho
+                # =========================
+
+                txt_right = (
+                    f"Beam Center = {field_center:.2f} mm\n"
+                    f"Right Penumbra = {pen_right:.2f} mm\n"
+                    f"Symmetry = {res['Symmetry']:.2f} %"
+                )
                 ax.text(
-                    0,
-                    93,
-                    f"F. Region {field_region:.2f} mm",
-                    ha="center",
-                    fontsize=8
+                    0.68,
+                    1.1,
+                    txt_right,
+                    transform=ax.transAxes,
+                    va="top",
+                    fontsize=8,
+                    zorder=50,
+                    bbox=dict(
+                        facecolor="wheat",
+                        alpha=0.90
+                    )
                 )
 
-                if es_fff:
 
+            # =========================
+            # Formato
+            # =========================
 
-                    # =========================
-                    # Slope points
-                    # =========================
-                
+            ax.set_title(
+                f"Eje {eje}",
+                fontsize=8
+            )
 
-                    x1_l = data["x1_l"]
-                    x2_l = data["x2_l"]
+            ax.set_xlabel(
+                "Off-axis (mm)",
+                fontsize=9
+            )
 
-                    x1_r = data["x1_r"]
-                    x2_r = data["x2_r"]
+            ax.set_ylabel(
+                "Dose (%)",
+                fontsize=9
+            )
 
-                    D1_l = data["D1_l"]
-                    D2_l = data["D2_l"]
+            ax.tick_params(
+                labelsize=8
+            )
 
-                    D1_r = data["D1_r"]
-                    D2_r = data["D2_r"]
-                        
-                    ax.scatter(
-                        [x1_l, x2_l, x1_r, x2_r],
-                        [D1_l, D2_l, D1_r, D2_r],
-                        color="royalblue",
-                        s=40,
-                        zorder=2
-                    )
+            ax.grid(
+                True,
+                alpha=0.25
+            )
 
-                    ax.plot(
-                        [x1_l, x2_l],
-                        [D1_l, D2_l],
-                        color="red",
-                        linestyle="--",
-                        lw=1.5
-                    )
-
-                    ax.plot(
-                        [x1_r, x2_r],
-                        [D1_r, D2_r],
-                        color="red",
-                        linestyle="--",
-                        lw=1.5
-                    )
-
-                    # =========================
-                    # Gaussian plot
-                    # =========================
-
-                    A_fit = data["A_fit"]
-                    mu_fit = data["Mu_fit"]
-                    sigma_fit = data["Sigma_fit"]
-                    C_fit = data["C_fit"]
-
-                    mask_gauss = (
-                        (x_plot >= l20)
-                        &
-                        (x_plot <= r20)
-                    )
-
-                    y_gauss = gaussian(
-                        x_plot,
-                        A_fit,
-                        mu_fit,
-                        sigma_fit,
-                        C_fit
-                    )
-
-                    ax.plot(
-                        x_plot[mask_gauss],
-                        y_gauss[mask_gauss],
-                        color="#b0b7ff",
-                        linestyle=":",
-                        linewidth=1.5,
-                        alpha=0.9
-                    )
-
-
-                    # =========================
-                    # Cuadro izquierdo
-                    # =========================
-
-                    txt_left = (
-                        f"Gaussian Offset = {res['GaussianOffset']:.2f} mm\n"
-                        f"Left Penumbra = {pen_left:.2f} mm\n"
-                        f"Left Slope = {res['SlopeLeft']:.4f} mm⁻¹\n"
-                        f"Slope Avg = {res['SlopeAvg']:.4f} mm⁻¹\n"
-                        f"Unflatness = {res['Unflatness']:.3f}"
-                    )
-
-                    ax.text(
-                        -0.05,
-                        1.1,
-                        txt_left,
-                        transform=ax.transAxes,
-                        va="top",
-                        zorder=50,
-                        fontsize=8,
-                        bbox=dict(
-                            facecolor="wheat",
-                            alpha=0.90
-                        )
-                    )
-
-                    # =========================
-                    # Cuadro derecho
-                    # =========================
-
-                    txt_right = (
-                        f"Beam Center = {field_center:.2f} mm\n"
-                        f"Right Penumbra = {pen_right:.2f} mm\n"
-                        f"Right Slope = {res['SlopeRight']:.4f} mm⁻¹\n"
-                        f"Symmetry = {res['Symmetry']:.2f} %\n"
-                        f"Peak Position = {res['PeakPosition']:.2f} mm"
-                    )
-                    ax.text(
-                        0.68,
-                        1.1,
-                        txt_right,
-                        transform=ax.transAxes,
-                        va="top",
-                        fontsize=8,
-                        zorder=50,
-                        bbox=dict(
-                            facecolor="wheat",
-                            alpha=0.90
-                        )
-                    )
-
-
-                else:
-
-
-                    # =========================
-                    # Cuadro izquierdo
-                    # =========================
-
-                    txt_left = (
-                        f"Left Penumbra = {pen_left:.2f} mm\n"
-                        f"Flatness = {res['Flatness']:.2f} %"
-                    )
-
-                    ax.text(
-                        -0.05,
-                        1.1,
-                        txt_left,
-                        transform=ax.transAxes,
-                        va="top",
-                        zorder=50,
-                        fontsize=8,
-                        bbox=dict(
-                            facecolor="wheat",
-                            alpha=0.90
-                        )
-                    )
-
-                    # =========================
-                    # Cuadro derecho
-                    # =========================
-
-                    txt_right = (
-                        f"Beam Center = {field_center:.2f} mm\n"
-                        f"Right Penumbra = {pen_right:.2f} mm\n"
-                        f"Symmetry = {res['Symmetry']:.2f} %"
-                    )
-                    ax.text(
-                        0.68,
-                        1.1,
-                        txt_right,
-                        transform=ax.transAxes,
-                        va="top",
-                        fontsize=8,
-                        zorder=50,
-                        bbox=dict(
-                            facecolor="wheat",
-                            alpha=0.90
-                        )
-                    )
-
-
-                # =========================
-                # Formato
-                # =========================
-
-                ax.set_title(
-                    f"Eje {eje}",
-                    fontsize=8
-                )
-
-                ax.set_xlabel(
-                    "Off-axis (mm)",
-                    fontsize=9
-                )
-
-                ax.set_ylabel(
-                    "Dose (%)",
-                    fontsize=9
-                )
-
-                ax.tick_params(
-                    labelsize=8
-                )
-
-                ax.grid(
-                    True,
-                    alpha=0.25
-                )
-
-                ax.set_xlim(
-                    np.min(x),
-                    np.max(x)
-                )
+            ax.set_xlim(
+                np.min(x),
+                np.max(x)
+            )
 
 
         # ==========================================
@@ -1576,6 +1575,9 @@ def process_file(
     if return_fig:
         
         return fig
+
+    print("\nRESULTADOS EXPORT")
+    print(resultados_export.keys())
 
     return resultados_export
 
