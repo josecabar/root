@@ -16,6 +16,75 @@ import os
 import re
 
 
+import tkinter as tk
+from tkinter import ttk
+
+# ==========================================================
+# Geometría de medida IC Profiler
+# ==========================================================
+
+# Profundidad equivalente agua del montaje:
+#
+# 3 cm PMMA (ρ = 1.06 g/cm³)
+# + 9 mm equivalentes agua hasta el plano detector
+#
+# Depth = 4.08 cm w.e.
+
+PMMA_THICKNESS_CM = 3.0
+PMMA_DENSITY = 1.06
+
+DETECTOR_WATER_EQUIV_CM = 0.9
+
+DEPTH_CM = (
+    PMMA_THICKNESS_CM * PMMA_DENSITY
+    + DETECTOR_WATER_EQUIV_CM
+)
+
+# ==========================================================
+# Geometría IC Profiler
+# ==========================================================
+
+# Los detectores del IC Profiler se encuentran
+# aproximadamente a 9 mm de la superficie.
+#
+# El software Profiler reporta las dimensiones
+# proyectadas a SSD = 100 cm.
+#
+# Se aplica una corrección geométrica:
+#
+# x_100 = x_detector * 100 / 100.9
+
+SSD_REFERENCE_CM = 100.0
+
+# Distancia equivalente desde la superficie
+# hasta el plano efectivo de detectores
+
+DETECTOR_DEPTH_CM = 0.9
+
+# Corrección geométrica para proyectar las
+# coordenadas medidas al plano SSD = 100 cm
+
+PROFILE_SCALE_FACTOR = (
+    SSD_REFERENCE_CM
+    /
+    (
+        SSD_REFERENCE_CM
+        + DETECTOR_DEPTH_CM
+    )
+)
+
+
+
+# --- PARÁMETROS DE AJUSTE FOGLIATA (Tabla II) ---
+# Basado en Fogliata 2015 para haces 6 MV FFF [5]
+FOGLIATA_COEFFS = {
+    '6MV_FFF': {'a': 91.0, 'b': 1.53, 'c': 1.15, 'd': -0.0072, 'e': 0.011}
+}
+
+
+# ==========================================================
+
+
 def atan_edge(x, A, B, x0, C):
 
     return (
@@ -41,12 +110,12 @@ def atan_inverse(
         ) / B
     )
 
-factor = 1000 / 1009
 
 
 def analyze_profile_geometry(
     net_doses,
-    axis_prefix
+    axis_prefix,
+    field_size_cm
 ):
     """
     Analiza la geometría de un perfil de IC Profiler.
@@ -81,7 +150,7 @@ def analyze_profile_geometry(
         axis_prefix
     )
 
-    x_raw = x_raw * factor
+    x_raw = x_raw * PROFILE_SCALE_FACTOR
 
     if len(x_raw) == 0:
         raise ValueError(
@@ -182,43 +251,43 @@ def analyze_profile_geometry(
     # Región de campo preliminar
     # ==========================================================
 
+    fs = field_size_cm * 10
+
     if axis_prefix in ["PD", "ND"]:
 
-        fs = field_size_lin / np.sqrt(2)
-
         if fs <= 100:
-            field_region_lin = field_size_lin - 40
+            field_region = fs * 2**0.5 - 40
 
         elif fs <= 300:
-            field_region_lin = (
-                field_size_lin
-                - field_size_lin * 0.40
+            field_region = (
+                fs * 2**0.5
+                - fs * 2**0.5 * 0.40
             )
 
         else:
-            field_region_lin = field_size_lin - 120
+            field_region = fs * 2**0.5 - 120
 
     else:
 
-        if field_size_lin <= 100:
-            field_region_lin = field_size_lin - 20
+        if fs <= 100:
+            field_region = fs - 20
 
-        elif field_size_lin <= 300:
-            field_region_lin = (
-                field_size_lin
-                - field_size_lin * 0.20
+        elif fs <= 300:
+            field_region = (
+                fs
+                - fs * 0.20
             )
 
         else:
-            field_region_lin = field_size_lin - 60
+            field_region = fs - 60
 
     fr_left = (
-        -field_region_lin / 2
+        -field_region / 2
         + field_center_lin
     )
 
     fr_right = (
-        field_region_lin / 2
+        field_region / 2
         + field_center_lin
     )
 
@@ -389,50 +458,6 @@ def analyze_profile_geometry(
     # Región útil de campo
     # ==========================================================
 
-    if axis_prefix in ["PD", "ND"]:
-
-        fs = field_size / np.sqrt(2)
-
-        if fs <= 100:
-
-            field_region = (
-                field_size - 40
-            )
-
-        elif fs <= 300:
-
-            field_region = (
-                field_size
-                - field_size * 0.40
-            )
-
-        else:
-
-            field_region = (
-                field_size - 120
-            )
-
-    else:
-
-        if field_size <= 100:
-
-            field_region = (
-                field_size - 20
-            )
-
-        elif field_size <= 300:
-
-            field_region = (
-                field_size
-                - field_size * 0.20
-            )
-
-        else:
-
-            field_region = (
-                field_size - 60
-            )
-
     fr_left = (
         -field_region / 2
         + field_center
@@ -454,6 +479,7 @@ def analyze_profile_geometry(
         "f": f,
 
         "field_size": field_size,
+        "field_size_cm": field_size_cm,
         "field_region": field_region,
         "field_center": field_center,
 
@@ -489,6 +515,9 @@ def analyze_profile_geometry(
         "x_r": x_r,
         "y_r": y_r
     }
+
+
+
 
 def obtener_campo(nombre_archivo):
     """
@@ -703,7 +732,7 @@ def guardar_resultados_csv(
         f"[OK] CSV guardado: {csv_path}"
     )
     
-def analyze_flat_beam(profile, axis_prefix):
+def analyze_flat_beam(profile):
     """
     Análisis IEC para haces filtrados.
 
@@ -732,60 +761,16 @@ def analyze_flat_beam(profile, axis_prefix):
     y = profile["y"]
 
     field_size = profile["field_size"]
+    field_size_cm = profile["field_size_cm"]
     field_center = profile["field_center"]
+    field_region = profile["field_region"]
 
     # ==========================================================
     # Región IEC para evaluación
     # ==========================================================
 
-    fs_cm = field_size / 10
-
-    if axis_prefix in ["PD", "ND"]:
-
-        fs = fs_cm / np.sqrt(2)
-
-        if fs <= 10:
-
-            region_cm = (
-                fs_cm - 4
-            )
-
-        elif fs <= 30:
-
-            region_cm = (
-                fs_cm
-                - fs_cm * 0.40
-            )
-
-        else:
-
-            region_cm = (
-                fs_cm - 12
-            )
-
-    else:
-
-        if fs_cm <= 10:
-
-            region_cm = (
-                fs_cm - 2
-            )
-
-        elif fs_cm <= 30:
-
-            region_cm = (
-                fs_cm
-                - fs_cm * 0.20
-            )
-
-        else:
-
-            region_cm = (
-                fs_cm - 6
-            )
-
     half_region_mm = (
-        region_cm * 10 / 2
+        field_region / 2
     )
 
     mask = (
@@ -900,144 +885,598 @@ def analyze_flat_beam(profile, axis_prefix):
             )
     }
 
-def calculate_symmetry_stability(
+
+
+def create_stability_figure(
+    file_path,
     all_frames,
+    field_size_cm,
+    es_fff
+):
+    
+    nombre_archivo = os.path.basename(
+        file_path
+    )
+    
+    stability = calculate_all_stability(
+        all_frames,
+        field_size_cm,
+        es_fff
+    )
+
+    fig, axs = plt.subplots(
+        2,
+        2,
+        figsize=(12, 10)
+    )
+
+    axes_map = {
+        "X": axs[0,0],
+        "Y": axs[0,1],
+        "PD": axs[1,0],
+        "ND": axs[1,1]
+    }
+
+    for eje in ["X", "Y", "PD", "ND"]:
+
+        ax = axes_map[eje]
+
+        res = stability[eje]
+
+        # -----------------------
+        # Simetría
+        # -----------------------
+
+        time_plot = np.log1p(
+            res["time_s"]
+        )
+
+        line1, = ax.plot(
+            np.log1p(res["time_s"]),
+            res["symmetry"],
+            color="royalblue",
+            label="Symmetry (%)"
+        )
+
+        ax.axvline(
+            np.log1p(
+                res["symmetry_stability_time_s"]
+            ),
+            color="royalblue",
+            ls="--"
+        )
+        
+
+        if eje in ["X", "PD"]:
+            ax.set_ylabel(
+                "Symmetry (%)",
+                color="royalblue"
+            )
+
+
+        ax.tick_params(
+            axis="y",
+            colors="royalblue"
+        )
+
+        # -----------------------
+        # Flatness / Unflatness
+        # -----------------------
+
+        ax2 = ax.twinx()
+
+        fig.subplots_adjust(
+            left=0.08,
+            right=0.92,
+            top=0.90,
+            bottom=0.08,
+            wspace=0.30,
+            hspace=0.30
+        )
+
+        etiqueta = (
+            "Unflatness (%)"
+            if es_fff
+            else "Flatness (%)"
+        )
+
+        line2, = ax2.plot(
+            np.log1p(res["time_s"]),
+            res["metric"],
+            color="darkorange",
+            label=etiqueta,
+        )
+                
+        ax.axvline(
+            np.log1p(
+                res["metric_stability_time_s"]
+            ),
+            color="darkorange",
+            ls="--"
+        )
+
+        if eje in ["Y", "ND"]:
+            ax2.set_ylabel(
+                etiqueta,
+                color="darkorange"
+            )
+
+        ax2.tick_params(
+            axis="y",
+            colors="darkorange"
+        )
+
+        ax.set_title(
+            f"Eje {eje}"
+        )
+
+        ax.set_xlabel(
+            "Time (s)"
+        )
+
+        ax.grid(
+            True,
+            alpha=0.3
+        )
+
+        flat_min = min(
+            0.995 * np.min(stability[e]["metric"])
+            for e in ["X","Y","PD","ND"]
+        )
+
+        flat_max = max(
+            1.005 * np.max(stability[e]["metric"])
+            for e in ["X","Y","PD","ND"]
+        )
+
+        ax2.set_ylim(
+            flat_min,
+            flat_max
+        )
+        sym_min = min(
+            0.995 * np.min(stability[e]["symmetry"])
+            for e in ["X","Y","PD","ND"]
+        )
+
+        sym_max = max(
+            1.005 * np.max(stability[e]["symmetry"])
+            for e in ["X","Y","PD","ND"]
+        )
+
+        ax.set_ylim(
+            sym_min,
+            sym_max
+        )
+
+        tmax = np.max(
+            res["time_s"]
+        )
+
+        ticks = np.array(
+            [0, 1, 2, 4, 9, 16, 25, 36, 49, 64]
+        )
+
+        ticks = ticks[
+            ticks <= tmax
+        ]
+        ax.set_xticks(
+            np.log1p(ticks)
+        )
+
+        ax.set_xticklabels(ticks)
+
+
+        ax.legend(
+            [line1, line2],
+            ["Symmetry (%)", etiqueta],
+            loc="best"
+        )
+        
+        txt = (
+            f"Sym. stab. = "
+            f"{res['symmetry_stability_time_s']:.1f} s\n"
+            f"{etiqueta[:4]}. stab. = "
+            f"{res['metric_stability_time_s']:.1f} s"
+        )
+
+        ax2.text(
+            0.02,
+            0.98,
+            txt,
+            transform=ax.transAxes,
+            va="top",
+            fontsize=8,
+            zorder=100, # <- alto
+            bbox=dict(
+                facecolor="white",
+                alpha=0.8
+            )
+        )
+        
+        fig.suptitle(
+            f"{nombre_archivo}\n"
+            f"Symmetry / {etiqueta} Stability\n"
+            "Time axis = log(1+t)"
+        )
+        
+
+    fig.tight_layout()
+
+    return fig
+
+
+def analyze_stability_frame(
+    frame,
     eje,
-    tolerance=1.0,
-    window=10
+    field_center,
+    field_region,
+    es_fff
 ):
 
-    symmetry = []
+    # ==========================================================
+    # Extracción del perfil bruto
+    # ==========================================================
+
+    x_raw, y_raw = get_axis_profile(
+        frame,
+        eje
+    )
+
+    x_raw = x_raw * PROFILE_SCALE_FACTOR
+
+    if len(x_raw) == 0:
+        raise ValueError(
+            f"No se encontraron datos para {eje}"
+        )
+
+    # ==========================================================
+    # Normalización respecto al eje central (CAX)
+    # ==========================================================
+
+    f_lin = interp1d(
+        x_raw,
+        y_raw,
+        kind="linear",
+        fill_value="extrapolate"
+    )
+
+    cax = float(f_lin(0))
+
+    y_norm = (
+        y_raw / cax
+    ) * 100
+
+    f = interp1d(
+        x_raw,
+        y_norm,
+        kind="linear",
+        fill_value="extrapolate"
+    )
+
+    # ==========================================================
+    # Región IEC para evaluación
+    # ==========================================================
+
+    mask = (
+        np.abs(
+            x_raw - field_center
+        )
+        <= field_region / 2
+    )
+
+    x_region = x_raw[mask]
+    y_region = y_norm[mask]
+
+    # ==========================================================
+    # Interpolador del perfil
+    # ==========================================================
+
+    f_interp = interp1d(
+        x_raw,
+        y_norm,
+        kind="linear",
+        fill_value="extrapolate"
+    )
+
+
+    # ==========================================================
+    # Symmetry Point Ratio (IEC)
+    # ==========================================================
+
+    max_ratio = 1.0
+
+    flat_values = []
+
+    for x_left, d_left in zip(
+        x_region,
+        y_region
+    ):
+
+        x_right = (
+            2 * field_center
+            - x_left
+        )
+
+        d_right = float(
+            f_interp(x_right)
+        )
+
+        ratio = max(
+            d_left / d_right,
+            d_right / d_left
+        )
+
+        max_ratio = max(
+            max_ratio,
+            ratio
+        )
+
+        flat_values.extend(
+            [d_left, d_right]
+        )
+
+    symmetry = (
+        max_ratio * 100
+    )
+
+
+    # ==========================================================
+    # Flatness/Unflatness-bm
+    # ==========================================================
+
+    flat_values = np.asarray(
+        flat_values
+    )
+
+    if es_fff:
+
+        cax = float(
+            f_interp(0)
+        )
+
+        min_dose = np.min(
+            flat_values
+        )
+        
+        metric = (
+            cax / min_dose * 100
+        )
+
+
+    else:
+
+    # ==========================================================
+    # Flatness-bm
+    # ==========================================================
+
+        max_dose = np.max(
+            flat_values
+        )
+
+        min_dose = np.min(
+            flat_values
+        )
+
+        metric = (
+            max_dose / min_dose
+        ) * 100
+
+    return symmetry, metric
+        
+
+def calculate_all_stability(
+    all_frames,
+    field_size_cm,
+    es_fff
+):
+
+    results = {
+
+        "X": {
+            "symmetry": [],
+            "metric": []
+        },
+
+        "Y": {
+            "symmetry": [],
+            "metric": []
+        },
+
+        "PD": {
+            "symmetry": [],
+            "metric": []
+        },
+
+        "ND": {
+            "symmetry": [],
+            "metric": []
+        }
+    }
+
     time_s = []
 
+
+    last_frame = all_frames.iloc[-1]
+
+    reference = {}
+
+    for eje in ["X", "Y", "PD", "ND"]:
+
+        if es_fff:
+
+            data = analyze_fogliata_linear(
+                last_frame,
+                eje,
+                field_size_cm,
+                depth_cm=DEPTH_CM
+            )
+
+        else:
+
+            data = analyze_profile_geometry(
+                last_frame,
+                eje,
+                field_size_cm
+            )
+
+        reference[eje] = {
+
+            "field_center":
+                data["field_center"],
+
+            "field_region":
+                data["field_region"]
+        }
+
+
+
     for _, frame in all_frames.iterrows():
-
-        profile = analyze_profile_geometry(
-            frame,
-            eje
-        )
-
-        res = analyze_flat_beam(
-            profile
-        )
-
-        symmetry.append(
-            res["Symmetry"]
-        )
 
         time_s.append(
             frame["TIMETIC"] / 1e6
         )
 
-    symmetry = np.array(symmetry)
+        for eje in ["X", "Y", "PD", "ND"]:
+
+            ref = reference[eje]
+
+            symmetry, metric = (
+                analyze_stability_frame(
+                    frame,
+                    eje,
+                    ref["field_center"],
+                    ref["field_region"],
+                    es_fff
+                )
+            )
+
+            results[eje]["symmetry"].append(
+                symmetry
+            )
+
+            results[eje]["metric"].append(
+                metric
+            )
+
     time_s = np.array(time_s)
 
-    sym_ref = np.median(
-        symmetry[-20:]
-    )
+    for eje in ["X", "Y", "PD", "ND"]:
 
-    deviation = np.abs(
-        symmetry - sym_ref
-    )
 
-    stability_idx = None
+        # --------------------------------
+        # Simetría
+        # --------------------------------
+
+        sym_ref = np.median(
+            results[eje]["symmetry"][-20:]
+        )
+
+        sym_dev = np.abs(
+            results[eje]["symmetry"] - sym_ref
+        )
+
+        sym_idx = None
+
+        for i in range(
+            len(results[eje]["symmetry"]) - 10 + 1
+        ):
+
+            if np.all(
+                sym_dev[i:i+10]
+                <= 1.0
+            ):
+                sym_idx = i
+                break
+
+        # --------------------------------
+        # Flatness / Unflatness
+        # --------------------------------
+
+        metric_ref = np.median(
+            results[eje]["metric"][-20:]
+        )
+
+        metric_dev = np.abs(
+            results[eje]["metric"] - metric_ref
+        )
+
+        metric_idx = None
+
+        for i in range(
+            len(results[eje]["metric"]) - 10 + 1
+        ):
+
+            if np.all(
+                metric_dev[i:i+10]
+                <= 1.0
+            ):
+                metric_idx = i
+                break
+
+        # --------------------------------
+        # Guardar resultados
+        # --------------------------------
+
+        results[eje]["time_s"] = time_s
+
+        results[eje]["symmetry_ref"] = sym_ref
+
+        results[eje]["metric_ref"] = metric_ref
+
+        results[eje]["symmetry_stability_time_s"] = (
+            time_s[sym_idx]
+            if sym_idx is not None
+            else np.nan
+        )
+
+        results[eje]["metric_stability_time_s"] = (
+            time_s[metric_idx]
+            if metric_idx is not None
+            else np.nan
+        )
+
+    return results
+
+
+
+def first_stable_index(
+    deviation,
+    tolerance,
+    window
+):
 
     for i in range(
-        len(symmetry) - window + 1
+        len(deviation) - window + 1
     ):
 
         if np.all(
             deviation[i:i+window]
             <= tolerance
         ):
-            stability_idx = i
-            break
+            return i
 
-    return {
-        "symmetry": symmetry,
-        "time_s": time_s,
-        "mean_symmetry": sym_ref,
-        "stability_idx": stability_idx,
-        "stability_time_s": (
-            time_s[stability_idx]
-            if stability_idx is not None
-            else np.nan
-        )
-    }
+    return None
+
 
 def process_file(
     file_path,
     show_plot=False,
     return_fig=False
 ):
-    
+
     resultados_export = {}
 
     nombre_archivo = os.path.basename(
         file_path
     )
 
-    es_fff = "fff" in nombre_archivo.lower()
+    es_fff = (
+        "fff" in nombre_archivo.lower()
+    )
 
-    all_frames = load_ic_profiler_prm_all_frames(file_path)
-
-
-    #######
-
-
-##    stability_results = {}
-##
-##    for eje in ["X", "Y", "PD", "ND"]:
-##
-##        stability_results[eje] = (
-##            calculate_symmetry_stability(
-##                all_frames,
-##                eje,
-##                tolerance=1.0,
-##                window=10
-##            )
-##        )
-##
-##    for eje, res in stability_results.items():
-##
-##        print(
-##            f"{eje}: "
-##            f"Simetría media = "
-##            f"{res['mean_symmetry']:.2f}%   "
-##            f"Tiempo de estabilidad = "
-##            f"{res['stability_time_s']:.2f} s"
-##        )
-
-##    fig, ax = plt.subplots(
-##        figsize=(10,6)
-##    )
-##
-##    for eje, res in stability_results.items():
-##
-##        ax.plot(
-##            res["time_s"],
-##            res["symmetry"],
-##            label=eje
-##        )
-##
-##        ax.axvline(
-##            res["stability_time_s"],
-##            linestyle="--",
-##            alpha=0.5
-##        )
-##
-##    ax.set_xlabel("Tiempo (s)")
-##    ax.set_ylabel("Simetría (%)")
-##    ax.legend()
-##    ax.grid(True)
-##
-##    plt.show()
-##
-
-    ########
-
-
-
+    all_frames = load_ic_profiler_prm_all_frames(
+        file_path
+    )
 
     net_doses = all_frames.iloc[-1]
 
@@ -1047,7 +1486,55 @@ def process_file(
         )
     )
 
+    # =====================================
+    # ANALISIS DE LOS 4 EJES
+    # =====================================
 
+    analisis = {}
+
+    for eje in ["X", "Y", "PD", "ND"]:
+
+        if es_fff:
+
+            data = analyze_fogliata_linear(
+                net_doses,
+                eje,
+                field_size_cm,
+                depth_cm=DEPTH_CM
+            )
+
+            res = data["results"]
+
+        else:
+
+            data = analyze_profile_geometry(
+                net_doses,
+                eje,
+                field_size_cm
+            )
+
+            res = analyze_flat_beam(
+                data
+            )
+
+        analisis[eje] = {
+            "data": data,
+            "res": res
+        }
+
+        if eje in ["X", "Y"]:
+
+            resultados_export[eje] = {
+                **res
+            }
+
+    # =====================================
+    # SI SOLO QUIERO RESULTADOS
+    # =====================================
+
+    if not return_fig:
+
+        return resultados_export
 
     fig, axs = plt.subplots(
         2,
@@ -1064,126 +1551,95 @@ def process_file(
 
     for eje in ["X", "Y", "PD", "ND"]:
 
-        if es_fff:
+        data = analisis[eje]["data"]
+        res = analisis[eje]["res"]
 
-            data = analyze_fogliata_linear(
-                net_doses,
-                eje,
-                field_size_cm,
-                depth_cm=4.08
-            )
+        # ==========================================
+        # GRAFICA 2x2
+        # ==========================================
+                
+        ax = axes_map[eje]
 
-            res = data["results"]
+        x = data["x"]
+        y = data["y"]
+        f = data["f"]
 
-        else:
+        # =========================
+        # Datos
+        # =========================
 
-            data = analyze_profile_geometry(
-                net_doses,
-                eje
-            )
+        l20 = data["l20"]
+        l50 = data["l50"]
+        l80 = data["l80"]
 
-            res = analyze_flat_beam(
-                data, eje
-            )
-
-        if eje == "X":
-
-            resultados_export["X"] = {
-                **res
-            }
-            
-        if eje == "Y":
-
-            resultados_export["Y"] = {
-                **res
-            }
-
-        if return_fig:
-
-            # ==========================================
-            # GRAFICA 2x2
-            # ==========================================
-                    
-            ax = axes_map[eje]
-
-            x = data["x"]
-            y = data["y"]
-            f = data["f"]
-
-            # =========================
-            # Datos
-            # =========================
-
-            l20 = data["l20"]
-            l50 = data["l50"]
-            l80 = data["l80"]
-
-            r20 = data["r20"]
-            r50 = data["r50"]
-            r80 = data["r80"]
+        r20 = data["r20"]
+        r50 = data["r50"]
+        r80 = data["r80"]
 
 
-            fr_left = data["fr_left"]
-            fr_right = data["fr_right"]
+        fr_left = data["fr_left"]
+        fr_right = data["fr_right"]
 
-            field_size = data["field_size"]
-            field_region = data["field_region"]
-            field_center = data["field_center"]
+        field_size = data["field_size"]
+        field_region = data["field_region"]
+        field_center = data["field_center"]
 
-            pen_left = data["pen_left"]
-            pen_right = data["pen_right"]
-            
+        pen_left = data["pen_left"]
+        pen_right = data["pen_right"]
+        
 
 
-            # =========================
-            # Perfil completo
-            # =========================
+        # =========================
+        # Perfil completo
+        # =========================
 
-            x_plot = np.linspace(
-                np.min(x),
-                np.max(x),
-                5000
-            )
+        x_plot = np.linspace(
+            np.min(x),
+            np.max(x),
+            5000
+        )
 
-            y_plot = f(x_plot)
+        y_plot = f(x_plot)
 
 
 
-            A_l = data["A_l"]
-            B_l = data["B_l"]
-            X0_l = data["X0_l"]
-            C_l = data["C_l"]
+        A_l = data["A_l"]
+        B_l = data["B_l"]
+        X0_l = data["X0_l"]
+        C_l = data["C_l"]
 
-            A_r = data["A_r"]
-            B_r = data["B_r"]
-            X0_r = data["X0_r"]
-            C_r = data["C_r"]
+        A_r = data["A_r"]
+        B_r = data["B_r"]
+        X0_r = data["X0_r"]
+        C_r = data["C_r"]
 
-            x_l = data["x_l"]
-            y_l = data["y_l"]
+        x_l = data["x_l"]
+        y_l = data["y_l"]
 
-            x_r = data["x_r"]
-            y_r = data["y_r"]
+        x_r = data["x_r"]
+        y_r = data["y_r"]
 
-            y_atan_l = atan_edge(
-                x_plot,
-                A_l,
-                B_l,
-                X0_l,
-                C_l
-            )
+        y_atan_l = atan_edge(
+            x_plot,
+            A_l,
+            B_l,
+            X0_l,
+            C_l
+        )
 
-            y_atan_r = atan_edge(
-                x_plot,
-                A_r,
-                B_r,
-                X0_r,
-                C_r
-            )
-            
-            # =====================
-            # Left atan fit
-            # =====================
+        y_atan_r = atan_edge(
+            x_plot,
+            A_r,
+            B_r,
+            X0_r,
+            C_r
+        )
+        
+        # =====================
+        # Left atan fit
+        # =====================
+
+        if len(x_l) > 0:
 
             mask_plot_l = (
                 (x_plot >= np.min(x_l))
@@ -1198,15 +1654,16 @@ def process_file(
                 linestyle="--",
                 linewidth=0.8,
                 alpha=0.8,
-                zorder = 50
+                zorder=50
             )
+                
 
-            
 
-
-            # =====================
-            # Right atan fit
-            # =====================
+        # =====================
+        # Right atan fit
+        # =====================
+        
+        if len(x_r) > 0:
 
             mask_plot_r = (
                 (x_plot >= np.min(x_r))
@@ -1221,347 +1678,346 @@ def process_file(
                 linestyle="--",
                 linewidth=0.8,
                 alpha=0.8,
-                zorder = 50
+                zorder=50
             )
 
+        # Curva completa naranja
 
-            # Curva completa naranja
-
-            ax.plot(
-                x_plot,
-                y_plot,
-                color="darkorange",
-                lw=1.5
-            )
-
-    ##        ax.scatter(
-    ##            x,
-    ##            y,
-    ##            color="black",
-    ##            s=8,
-    ##            alpha=0.6,
-    ##            zorder=5
-    ##        )
-
-            # Región de campo (verde)
-
-            mask_fr = (
-                (x_plot >= fr_left)
-                &
-                (x_plot <= fr_right)
-            )
-
-            ax.plot(
-                x_plot[mask_fr],
-                y_plot[mask_fr],
-                color="forestgreen",
-                lw=1.5
-            )
-            
-            # =========================
-            # Penumbra (20%-80%)
-            # =========================
-
-            for v in [l20, l80, r80, r20]:
-
-                ax.plot(
-                    [v, v],
-                    [0, 100],
-                    color="royalblue",
-                    ls="--",
-                    lw=1.5
-                )
-
-            # =========================
-            # Field Region
-            # =========================
-
-            y_top = np.max(y)
-
-            ax.plot(
-                [fr_left, fr_left],
-                [80, y_top],
-                color="green",
-                ls="--",
-                lw=1.5
-            )
-
-            ax.plot(
-                [fr_right, fr_right],
-                [80, y_top],
-                color="green",
-                ls="--",
-                lw=1.5
-            )
-
-            # =========================
-            # F. Size
-            # =========================
-
-            ax.annotate(
-                "",
-                xy=(l50, 50),
-                xytext=(r50, 50),
-                arrowprops=dict(
-                    arrowstyle="<->",
-                    color="black",
-                    lw=1.5
-                )
-            )
-
-            ax.text(
-                0,
-                53,
-                f"F. Size {field_size:.2f} mm",
-                ha="center",
-                fontsize=8
-            )
-
-            # =========================
-            # F. Region
-            # =========================
-
-            ax.annotate(
-                "",
-                xy=(fr_left, 90),
-                xytext=(fr_right, 90),
-                arrowprops=dict(
-                    arrowstyle="<->",
-                    color="black",
-                    lw=1.5
-                )
-            )
-
-            ax.text(
-                0,
-                93,
-                f"F. Region {field_region:.2f} mm",
-                ha="center",
-                fontsize=8
-            )
-
-            if es_fff:
-
-
-                # =========================
-                # Slope points
-                # =========================
-            
-
-                x1_l = data["x1_l"]
-                x2_l = data["x2_l"]
-
-                x1_r = data["x1_r"]
-                x2_r = data["x2_r"]
-
-                D1_l = data["D1_l"]
-                D2_l = data["D2_l"]
-
-                D1_r = data["D1_r"]
-                D2_r = data["D2_r"]
-                    
-                ax.scatter(
-                    [x1_l, x2_l, x1_r, x2_r],
-                    [D1_l, D2_l, D1_r, D2_r],
-                    color="royalblue",
-                    s=40,
-                    zorder=2
-                )
-
-                ax.plot(
-                    [x1_l, x2_l],
-                    [D1_l, D2_l],
-                    color="red",
-                    linestyle="--",
-                    lw=1.5
-                )
-
-                ax.plot(
-                    [x1_r, x2_r],
-                    [D1_r, D2_r],
-                    color="red",
-                    linestyle="--",
-                    lw=1.5
-                )
-
-                # =========================
-                # Gaussian plot
-                # =========================
-
-                A_fit = data["A_fit"]
-                mu_fit = data["Mu_fit"]
-                sigma_fit = data["Sigma_fit"]
-                C_fit = data["C_fit"]
-
-                mask_gauss = (
-                    (x_plot >= l20)
-                    &
-                    (x_plot <= r20)
-                )
-
-                y_gauss = gaussian(
-                    x_plot,
-                    A_fit,
-                    mu_fit,
-                    sigma_fit,
-                    C_fit
-                )
-
-                ax.plot(
-                    x_plot[mask_gauss],
-                    y_gauss[mask_gauss],
-                    color="#b0b7ff",
-                    linestyle=":",
-                    linewidth=1.5,
-                    alpha=0.9
-                )
-
-
-                # =========================
-                # Cuadro izquierdo
-                # =========================
-
-                txt_left = (
-                    f"Gaussian Offset = {res['GaussianOffset']:.2f} mm\n"
-                    f"Left Penumbra = {pen_left:.2f} mm\n"
-                    f"Left Slope = {res['SlopeLeft']:.4f} mm⁻¹\n"
-                    f"Slope Avg = {res['SlopeAvg']:.4f} mm⁻¹\n"
-                    f"Unflatness = {res['Unflatness']:.3f}"
-                )
-
-                ax.text(
-                    -0.05,
-                    1.1,
-                    txt_left,
-                    transform=ax.transAxes,
-                    va="top",
-                    zorder=50,
-                    fontsize=8,
-                    bbox=dict(
-                        facecolor="wheat",
-                        alpha=0.90
-                    )
-                )
-
-                # =========================
-                # Cuadro derecho
-                # =========================
-
-                txt_right = (
-                    f"Beam Center = {field_center:.2f} mm\n"
-                    f"Right Penumbra = {pen_right:.2f} mm\n"
-                    f"Right Slope = {res['SlopeRight']:.4f} mm⁻¹\n"
-                    f"Symmetry = {res['Symmetry']:.2f} %\n"
-                    f"Peak Position = {res['PeakPosition']:.2f} mm"
-                )
-                ax.text(
-                    0.68,
-                    1.1,
-                    txt_right,
-                    transform=ax.transAxes,
-                    va="top",
-                    fontsize=8,
-                    zorder=50,
-                    bbox=dict(
-                        facecolor="wheat",
-                        alpha=0.90
-                    )
-                )
-
-
-            else:
-
-
-                # =========================
-                # Cuadro izquierdo
-                # =========================
-
-                txt_left = (
-                    f"Left Penumbra = {pen_left:.2f} mm\n"
-                    f"Flatness = {res['Flatness']:.2f} %"
-                )
-
-                ax.text(
-                    -0.05,
-                    1.1,
-                    txt_left,
-                    transform=ax.transAxes,
-                    va="top",
-                    zorder=50,
-                    fontsize=8,
-                    bbox=dict(
-                        facecolor="wheat",
-                        alpha=0.90
-                    )
-                )
-
-                # =========================
-                # Cuadro derecho
-                # =========================
-
-                txt_right = (
-                    f"Beam Center = {field_center:.2f} mm\n"
-                    f"Right Penumbra = {pen_right:.2f} mm\n"
-                    f"Symmetry = {res['Symmetry']:.2f} %"
-                )
-                ax.text(
-                    0.68,
-                    1.1,
-                    txt_right,
-                    transform=ax.transAxes,
-                    va="top",
-                    fontsize=8,
-                    zorder=50,
-                    bbox=dict(
-                        facecolor="wheat",
-                        alpha=0.90
-                    )
-                )
-
-
-            # =========================
-            # Formato
-            # =========================
-
-            ax.set_title(
-                f"Eje {eje}",
-                fontsize=8
-            )
-
-            ax.set_xlabel(
-                "Off-axis (mm)",
-                fontsize=9
-            )
-
-            ax.set_ylabel(
-                "Dose (%)",
-                fontsize=9
-            )
-
-            ax.tick_params(
-                labelsize=8
-            )
-
-            ax.grid(
-                True,
-                alpha=0.25
-            )
-
-            ax.set_xlim(
-                np.min(x),
-                np.max(x)
-            )
-
-
-        # ==========================================
-        # Título general
-        # ==========================================
-
-        fig.suptitle(
-            f"{nombre_archivo}\n"
-            f"IC Profiler - Elekta",
-            fontsize=10
+        ax.plot(
+            x_plot,
+            y_plot,
+            color="darkorange",
+            lw=1.5
         )
+
+##        ax.scatter(
+##            x,
+##            y,
+##            color="black",
+##            s=8,
+##            alpha=0.6,
+##            zorder=5
+##        )
+
+        # Región de campo (verde)
+
+        mask_fr = (
+            (x_plot >= fr_left)
+            &
+            (x_plot <= fr_right)
+        )
+
+        ax.plot(
+            x_plot[mask_fr],
+            y_plot[mask_fr],
+            color="forestgreen",
+            lw=1.5
+        )
+        
+        # =========================
+        # Penumbra (20%-80%)
+        # =========================
+
+        for v in [l20, l80, r80, r20]:
+
+            ax.plot(
+                [v, v],
+                [0, 100],
+                color="royalblue",
+                ls="--",
+                lw=1.5
+            )
+
+        # =========================
+        # Field Region
+        # =========================
+
+        y_top = np.max(y)
+
+        ax.plot(
+            [fr_left, fr_left],
+            [80, y_top],
+            color="green",
+            ls="--",
+            lw=1.5
+        )
+
+        ax.plot(
+            [fr_right, fr_right],
+            [80, y_top],
+            color="green",
+            ls="--",
+            lw=1.5
+        )
+
+        # =========================
+        # F. Size
+        # =========================
+
+        ax.annotate(
+            "",
+            xy=(l50, 50),
+            xytext=(r50, 50),
+            arrowprops=dict(
+                arrowstyle="<->",
+                color="black",
+                lw=1.5
+            )
+        )
+
+        ax.text(
+            0,
+            53,
+            f"F. Size {field_size:.1f} mm",
+            ha="center",
+            fontsize=8
+        )
+
+        # =========================
+        # F. Region
+        # =========================
+
+        ax.annotate(
+            "",
+            xy=(fr_left, 90),
+            xytext=(fr_right, 90),
+            arrowprops=dict(
+                arrowstyle="<->",
+                color="black",
+                lw=1.5
+            )
+        )
+
+        ax.text(
+            0,
+            93,
+            f"F. Region {field_region:.1f} mm",
+            ha="center",
+            fontsize=8
+        )
+
+        if es_fff:
+
+
+            # =========================
+            # Slope points
+            # =========================
+        
+
+            x1_l = data["x1_l"]
+            x2_l = data["x2_l"]
+
+            x1_r = data["x1_r"]
+            x2_r = data["x2_r"]
+
+            D1_l = data["D1_l"]
+            D2_l = data["D2_l"]
+
+            D1_r = data["D1_r"]
+            D2_r = data["D2_r"]
+                
+            ax.scatter(
+                [x1_l, x2_l, x1_r, x2_r],
+                [D1_l, D2_l, D1_r, D2_r],
+                color="royalblue",
+                s=40,
+                zorder=2
+            )
+
+            ax.plot(
+                [x1_l, x2_l],
+                [D1_l, D2_l],
+                color="red",
+                linestyle="--",
+                lw=1.5
+            )
+
+            ax.plot(
+                [x1_r, x2_r],
+                [D1_r, D2_r],
+                color="red",
+                linestyle="--",
+                lw=1.5
+            )
+
+            # =========================
+            # Gaussian plot
+            # =========================
+
+            A_fit = data["A_fit"]
+            mu_fit = data["Mu_fit"]
+            sigma_fit = data["Sigma_fit"]
+            C_fit = data["C_fit"]
+
+            mask_gauss = (
+                (x_plot >= l20)
+                &
+                (x_plot <= r20)
+            )
+
+            y_gauss = gaussian(
+                x_plot,
+                A_fit,
+                mu_fit,
+                sigma_fit,
+                C_fit
+            )
+
+            ax.plot(
+                x_plot[mask_gauss],
+                y_gauss[mask_gauss],
+                color="#b0b7ff",
+                linestyle=":",
+                linewidth=1.5,
+                alpha=0.9
+            )
+
+
+            # =========================
+            # Cuadro izquierdo
+            # =========================
+
+            txt_left = (
+                f"Gaussian Offset = {res['GaussianOffset']:.1f} mm\n"
+                f"Left Penumbra = {pen_left:.1f} mm\n"
+                f"Left Slope = {res['SlopeLeft']:.3f} mm⁻¹\n"
+                f"Slope Avg = {res['SlopeAvg']:.3f} mm⁻¹\n"
+                f"Unflatness = {res['Unflatness']:.1f}"
+            )
+
+            ax.text(
+                -0.05,
+                1.1,
+                txt_left,
+                transform=ax.transAxes,
+                va="top",
+                zorder=50,
+                fontsize=8,
+                bbox=dict(
+                    facecolor="wheat",
+                    alpha=0.90
+                )
+            )
+
+            # =========================
+            # Cuadro derecho
+            # =========================
+
+            txt_right = (
+                f"Beam Center = {field_center:.1f} mm\n"
+                f"Right Penumbra = {pen_right:.1f} mm\n"
+                f"Right Slope = {res['SlopeRight']:.3f} mm⁻¹\n"
+                f"Symmetry = {res['Symmetry']:.1f} %\n"
+                f"Peak Position = {res['PeakPosition']:.1f} mm"
+            )
+            ax.text(
+                0.68,
+                1.1,
+                txt_right,
+                transform=ax.transAxes,
+                va="top",
+                fontsize=8,
+                zorder=50,
+                bbox=dict(
+                    facecolor="wheat",
+                    alpha=0.90
+                )
+            )
+
+
+        else:
+
+
+            # =========================
+            # Cuadro izquierdo
+            # =========================
+
+            txt_left = (
+                f"Left Penumbra = {pen_left:.1f} mm\n"
+                f"Flatness = {res['Flatness']:.1f} %"
+            )
+
+            ax.text(
+                -0.05,
+                1.1,
+                txt_left,
+                transform=ax.transAxes,
+                va="top",
+                zorder=50,
+                fontsize=8,
+                bbox=dict(
+                    facecolor="wheat",
+                    alpha=0.90
+                )
+            )
+
+            # =========================
+            # Cuadro derecho
+            # =========================
+
+            txt_right = (
+                f"Beam Center = {field_center:.1f} mm\n"
+                f"Right Penumbra = {pen_right:.1f} mm\n"
+                f"Symmetry = {res['Symmetry']:.1f} %"
+            )
+            ax.text(
+                0.68,
+                1.1,
+                txt_right,
+                transform=ax.transAxes,
+                va="top",
+                fontsize=8,
+                zorder=50,
+                bbox=dict(
+                    facecolor="wheat",
+                    alpha=0.90
+                )
+            )
+
+
+        # =========================
+        # Formato
+        # =========================
+
+        ax.set_title(
+            f"Eje {eje}",
+            fontsize=8
+        )
+
+        ax.set_xlabel(
+            "Off-axis (mm)",
+            fontsize=9
+        )
+
+        ax.set_ylabel(
+            "Dose (%)",
+            fontsize=9
+        )
+
+        ax.tick_params(
+            labelsize=8
+        )
+
+        ax.grid(
+            True,
+            alpha=0.25
+        )
+
+        ax.set_xlim(
+            np.min(x),
+            np.max(x)
+        )
+
+
+    # ==========================================
+    # Título general
+    # ==========================================
+
+    fig.suptitle(
+        f"{nombre_archivo}\n"
+        f"IC Profiler Analyzer",
+        fontsize=10
+    )
     
 ##    plt.tight_layout()
 ##    fig, axs = plt.subplots(
@@ -1571,13 +2027,16 @@ def process_file(
 ##    )
 ##    
 
+    fig.subplots_adjust(
+        left=0.05,
+        right=0.98,
+        top=0.90,
+        bottom=0.08,
+        wspace=0.15,
+        hspace=0.25
+    )
 
-    if return_fig:
-        
-        return fig
-
-    print("\nRESULTADOS EXPORT")
-    print(resultados_export.keys())
+    return fig
 
     return resultados_export
 
@@ -1597,38 +2056,82 @@ def gaussian(x, A, mu, sigma, C):
     )
 
 def get_field_size_from_filename(filename):
+    """
+    Obtiene el tamaño de campo (cm) a partir del nombre
+    del archivo.
 
-    import re
-    import os
+    Busca patrones del tipo:
 
-    nombre_archivo = os.path.basename(filename)
+        7x7.prm
+        10x10 6MV.prm
+        20 x 20 6FFF.prm
+
+    Si no puede determinar el tamaño de campo,
+    solicita el valor al usuario mediante una
+    ventana emergente.
+
+    Parameters
+    ----------
+    filename : str
+        Nombre o ruta completa del archivo.
+
+    Returns
+    -------
+    float
+        Tamaño medio de campo en cm.
+
+    Raises
+    ------
+    SystemExit
+        Si el usuario cancela la entrada manual.
+    """
+
+    # ==========================================================
+    # Intentar obtener el tamaño de campo desde el nombre
+    # ==========================================================
+
+    nombre_archivo = os.path.basename(
+        filename
+    )
 
     match = re.search(
-        r'(\d+)\s*x\s*(\d+)',
+        r"(\d+)\s*x\s*(\d+)",
         nombre_archivo,
         re.IGNORECASE
     )
 
     if match:
 
-        fs_x = float(match.group(1))
-        fs_y = float(match.group(2))
+        fs_x = float(
+            match.group(1)
+        )
 
-        return (fs_x + fs_y) / 2
+        fs_y = float(
+            match.group(2)
+        )
 
-    # ----------------------------------
-    # Pedir al usuario mediante popup
-    # ----------------------------------
+        return (
+            fs_x + fs_y
+        ) / 2
+
+    # ==========================================================
+    # Entrada manual por parte del usuario
+    # ==========================================================
 
     root = Tk()
+
     root.withdraw()
-    root.attributes("-topmost", True)
+    root.attributes(
+        "-topmost",
+        True
+    )
 
     field_size_cm = simpledialog.askfloat(
         title="Tamaño de campo",
         prompt=(
             "No se pudo determinar el tamaño "
-            "de campo a partir del nombre.\n\n"
+            "de campo a partir del nombre "
+            "del archivo.\n\n"
             "Introduzca el tamaño de campo (cm):"
         ),
         parent=root
@@ -1636,18 +2139,20 @@ def get_field_size_from_filename(filename):
 
     root.destroy()
 
+    # ==========================================================
+    # Cancelación por parte del usuario
+    # ==========================================================
+
     if field_size_cm is None:
+
         raise SystemExit(
-            "Operación cancelada por el usuario"
+            "Operación cancelada por el usuario."
         )
 
     return field_size_cm
 
-# --- PARÁMETROS DE AJUSTE FOGLIATA (Tabla II) ---
-# Basado en Fogliata 2015 para haces 6 MV FFF [5]
-FOGLIATA_COEFFS = {
-    '6MV_FFF': {'a': 91.0, 'b': 1.53, 'c': 1.15, 'd': -0.0072, 'e': 0.011}
-}
+
+
 
 def get_axis_profile(net_doses, axis_prefix):
     """Extrae el perfil gestionando gaps y el espaciado correcto."""
@@ -1772,7 +2277,7 @@ def analyze_fogliata_linear(
         net_doses,
         axis_prefix,
         field_size_cm,
-        depth_cm=4.08):
+        depth_cm=DEPTH_CM):
 
     # =============================
     # Perfil bruto
@@ -1783,7 +2288,7 @@ def analyze_fogliata_linear(
         axis_prefix
     )
 
-    x_raw = x_raw * factor
+    x_raw = x_raw * PROFILE_SCALE_FACTOR
 
     if len(x_raw) == 0:
         raise ValueError(
@@ -2062,16 +2567,35 @@ def analyze_fogliata_linear(
         l50 + r50
     ) / 2
 
-    if field_size_cm < 10:
+    fs = field_size_cm * 10
 
-        fr_factor = 0.60
+    if axis_prefix in ["PD", "ND"]:
+
+        if fs <= 100:
+            field_region = fs * 2**0.5 - 40
+
+        elif fs <= 300:
+            field_region = (
+                fs * 2**0.5
+                - fs * 2**0.5 * 0.40
+            )
+
+        else:
+            field_region = fs * 2**0.5 - 120
 
     else:
 
-        fr_factor = 0.80
+        if fs <= 100:
+            field_region = fs - 20
 
+        elif fs <= 300:
+            field_region = (
+                fs
+                - fs * 0.20
+            )
 
-    field_region = fr_factor * field_size
+        else:
+            field_region = fs - 60
 
     fr_left = (
         field_center
@@ -2082,7 +2606,6 @@ def analyze_fogliata_linear(
         field_center
         + field_region/2
     )
-
 
     
     # =============================
@@ -2146,33 +2669,19 @@ def analyze_fogliata_linear(
 ##    except Exception:
 ##
 ##        gauss_offset = np.nan
-
-    # =============================
-    # Unflatness
-    # =============================
-
-    cax = float(
-        f_final(0)
-    )
-
-    dose_fr_avg = (
-
-        f_final(fr_left)
-        +
-        f_final(fr_right)
-
-    ) / 2
-
-    unflatness = (
-        cax / dose_fr_avg
-    )
-
-    
+  
     # =============================
     # Slope Fogliata
     # =============================
 
-    half_fs = field_size / 2
+    if axis_prefix in ["PD", "ND"]:
+
+        half_fs = field_size_cm * 10 * 2**0.5 / 2
+
+    else:
+
+        half_fs = field_size_cm * 10 / 2
+
 
     x1_l = -half_fs / 3 + field_center
     x2_l = -2 * half_fs / 3 + field_center
@@ -2290,40 +2799,96 @@ def analyze_fogliata_linear(
         +
         abs(slope_r)
     ) / 2
-    # =============================
-    # Simetría Fogliata
-    # =============================
 
-    symmetry = 100.0
-    sym_pos = 0.0
 
-    x_sym = np.linspace(
-        fr_left,
-        0,
-        500
+    # ==========================================================
+    # Región IEC para evaluación
+    # ==========================================================
+
+    half_region_mm = (
+        field_region / 2
     )
 
-    for xx in x_sym:
+    mask = (
+        np.abs(
+            x_raw - field_center
+        )
+        <= half_region_mm
+    )
 
-        dl = float(
-            f_final(xx + field_center)
+    x_region = x_raw[mask]
+    y_region = y_raw[mask]
+
+    # ==========================================================
+    # Interpolador del perfil
+    # ==========================================================
+
+    f_interp = interp1d(
+        x_raw,
+        y_raw,
+        kind="linear",
+        fill_value="extrapolate"
+    )
+
+    # ==========================================================
+    # Simetría Fogliata
+    # ==========================================================
+
+    max_ratio = 1.0
+
+    flat_values = []
+
+    for x_left, d_left in zip(
+        x_region,
+        y_region
+    ):
+
+        x_right = (
+            2 * field_center
+            - x_left
         )
 
-        dr = float(
-            f_final(-xx + field_center)
+        d_right = float(
+            f_interp(x_right)
         )
 
-        if dl > 0 and dr > 0:
+        ratio = max(
+            d_left / d_right,
+            d_right / d_left
+        )
 
-            s = 100 * max(
-                dl / dr,
-                dr / dl
-            )
+        max_ratio = max(
+            max_ratio,
+            ratio
+        )
 
-            if s > symmetry:
+        flat_values.extend(
+            [d_left, d_right]
+        )
 
-                symmetry = s
-                sym_pos = xx
+    symmetry = (
+        max_ratio * 100
+    )
+
+    # ==========================================================
+    # Unlatness-bm
+    # ==========================================================
+
+    flat_values = np.asarray(
+        flat_values
+    )
+
+    cax = float(
+        f_interp(0)
+    )
+
+    min_dose = np.min(
+        flat_values
+    )
+    
+    unflatness = (
+        cax / min_dose * 100
+    )
 
                 
     # =============================
@@ -2509,7 +3074,7 @@ def visualizar(event):
 
     file_path = item[0]
 
-    mostrar_figura(
+    mostrar_perfiles(
         file_path
     )
 
@@ -2534,10 +3099,6 @@ def exportar_csv():
 # EJECUCION PRINCIPAL GUI
 # ==========================================
 
-import tkinter as tk
-from tkinter import ttk
-from tkinter import filedialog
-import os
 
 resultados_globales = {}
 
@@ -2613,9 +3174,9 @@ def visualizar():
 
     file_path = seleccion[0]
 
-    mostrar_figura(file_path)
+    mostrar_perfiles(file_path)
 
-def actualizar_grafica(event):
+def actualizar_grafica(event=None):
 
     seleccion = tree.selection()
 
@@ -2624,11 +3185,36 @@ def actualizar_grafica(event):
 
     file_path = seleccion[0]
 
-    mostrar_figura(file_path)
+    if modo_visualizacion.get() == "PERFILES":
+
+        mostrar_perfiles(file_path)
+
+    else:
+
+        mostrar_estabilidad(file_path)
+
+        
+
+def activar_perfiles():
+
+    global modo_visualizacion
+
+    modo_visualizacion = "PERFILES"
+
+    actualizar_grafica()
+
+
+def activar_estabilidad():
+
+    global modo_visualizacion
+
+    modo_visualizacion = "ESTABILIDAD"
+
+    actualizar_grafica()
 
 
 
-def mostrar_figura(file_path):
+def mostrar_perfiles(file_path):
 
     global canvas_actual
 
@@ -2687,6 +3273,56 @@ def mostrar_figura(file_path):
 ##    fig.canvas.manager.show()
 ##    fig.canvas.draw_idle()
 
+
+def mostrar_estabilidad(file_path):
+
+    nombre_archivo = os.path.basename(
+        file_path
+    )
+
+    es_fff = (
+        "fff" in nombre_archivo.lower()
+    )
+
+    all_frames = load_ic_profiler_prm_all_frames(
+        file_path
+    )
+
+    field_size_cm = (
+        get_field_size_from_filename(
+            nombre_archivo
+        )
+    )
+
+    global canvas_actual
+
+    if canvas_actual is not None:
+
+        old_fig = canvas_actual.figure
+
+        canvas_actual.get_tk_widget().destroy()
+
+        plt.close(old_fig)
+
+    fig = create_stability_figure(
+        file_path,
+        all_frames,
+        field_size_cm,
+        es_fff
+    )
+
+    canvas_actual = FigureCanvasTkAgg(
+        fig,
+        master=frame_plot
+    )
+
+    canvas_actual.draw()
+
+    canvas_actual.get_tk_widget().pack(
+        fill="both",
+        expand=True
+    )
+    
 def exportar_csv():
 
     if not resultados_globales:
@@ -2744,6 +3380,11 @@ def exportar_csv():
 # ------------------------------------------
 
 root = tk.Tk()
+
+modo_visualizacion = tk.StringVar(
+    master=root,
+    value="PERFILES"
+)
 
 root.title(
     "IC Profiler Analyzer"
@@ -2827,6 +3468,34 @@ btn_delete.pack(
     pady=5,
     fill="x"
 )
+
+# ------------------------------------------
+# Botón estabilidad
+# ------------------------------------------
+rb_profiles = tk.Radiobutton(
+    frame_left,
+    text="Perfiles",
+    variable=modo_visualizacion,
+    value="PERFILES",
+    command=actualizar_grafica
+)
+
+rb_profiles.pack(
+    fill="x"
+)
+
+rb_stability = tk.Radiobutton(
+    frame_left,
+    text="Estabilidad",
+    variable=modo_visualizacion,
+    value="ESTABILIDAD",
+    command=actualizar_grafica
+)
+
+rb_stability.pack(
+    fill="x"
+)
+
 # ------------------------------------------
 # Lista archivos
 # ------------------------------------------
