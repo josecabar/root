@@ -938,6 +938,13 @@ def create_stability_figure(
             label="Symmetry (%)"
         )
 
+        ax.axhline(
+            res["symmetry_ref"],
+            color="royalblue",
+            alpha=0.5,
+            ls=":"
+        )
+
         ax.axvline(
             np.log1p(
                 res["symmetry_stability_time_s"]
@@ -986,7 +993,14 @@ def create_stability_figure(
             color="darkorange",
             label=etiqueta,
         )
-                
+
+        ax2.axhline(
+            res["metric_ref"],
+            color="darkorange",
+            alpha=0.5,
+            ls=":"
+        )
+
         ax.axvline(
             np.log1p(
                 res["metric_stability_time_s"]
@@ -1074,9 +1088,9 @@ def create_stability_figure(
         
         txt = (
             f"Sym. stab. = "
-            f"{res['symmetry_stability_time_s']:.1f} s\n"
+            f"{res['symmetry_stability_time_s']:.2f} s\n"
             f"{etiqueta[:4]}. stab. = "
-            f"{res['metric_stability_time_s']:.1f} s"
+            f"{res['metric_stability_time_s']:.2f} s"
         )
 
         ax2.text(
