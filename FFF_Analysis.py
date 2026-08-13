@@ -945,6 +945,7 @@ def create_stability_figure(
             ls=":"
         )
 
+
         ax.axvline(
             np.log1p(
                 res["symmetry_stability_time_s"]
@@ -999,6 +1000,39 @@ def create_stability_figure(
             color="darkorange",
             alpha=0.5,
             ls=":"
+        )
+
+
+        ax2.text(
+            0.02,
+            res["symmetry_ref"],
+            f"{res['symmetry_ref']:.2f}",
+            transform=ax.get_yaxis_transform(),
+            fontsize=7,
+            color="royalblue",
+            va="center",
+            bbox=dict(
+                facecolor="white",
+                alpha=0.8,
+                edgecolor="none"
+            )
+        )
+
+
+        ax2.text(
+            0.98,
+            res["metric_ref"],
+            f"{res['metric_ref']:.2f}",
+            transform=ax2.get_yaxis_transform(),
+            fontsize=7,
+            color="darkorange",
+            ha="right",
+            va="center",
+            bbox=dict(
+                facecolor="white",
+                alpha=0.8,
+                edgecolor="none"
+            )
         )
 
         ax.axvline(
@@ -1066,20 +1100,26 @@ def create_stability_figure(
             res["time_s"]
         )
 
-        ticks = np.array(
-            [0, 1, 2, 4, 9, 16, 25, 36, 49, 64]
+        n_ticks = 7
+
+        xticks_log = np.linspace(
+            0,
+            np.log1p(tmax),
+            n_ticks
         )
 
-        ticks = ticks[
-            ticks <= tmax
-        ]
+        ticks_real = np.round(
+            np.expm1(xticks_log)
+        ).astype(int)
+
         ax.set_xticks(
-            np.log1p(ticks)
+            np.log1p(ticks_real)
         )
 
-        ax.set_xticklabels(ticks)
-
-
+        ax.set_xticklabels(
+            ticks_real
+        )
+        
         ax.legend(
             [line1, line2],
             ["Symmetry (%)", etiqueta],
@@ -1094,8 +1134,8 @@ def create_stability_figure(
         )
 
         ax2.text(
-            0.02,
-            0.98,
+            0.04,
+            0.95,
             txt,
             transform=ax.transAxes,
             va="top",
@@ -1103,14 +1143,24 @@ def create_stability_figure(
             zorder=100, # <- alto
             bbox=dict(
                 facecolor="white",
+                edgecolor="lightgray",
                 alpha=0.8
             )
         )
         
         fig.suptitle(
             f"{nombre_archivo}\n"
-            f"Symmetry / {etiqueta} Stability\n"
-            "Time axis = log(1+t)"
+            f"Symmetry / {etiqueta} Stability",
+            fontsize=12
+        )
+
+        fig.text(
+            0.5,
+            0.92,
+            "Time represented as log(1+t)",
+            ha="center",
+            fontsize=8,
+            color="gray"
         )
         
 
@@ -1382,7 +1432,7 @@ def calculate_all_stability(
         # --------------------------------
 
         sym_ref = np.median(
-            results[eje]["symmetry"][-20:]
+            results[eje]["symmetry"][-30:]
         )
 
         sym_dev = np.abs(
@@ -1407,7 +1457,7 @@ def calculate_all_stability(
         # --------------------------------
 
         metric_ref = np.median(
-            results[eje]["metric"][-20:]
+            results[eje]["metric"][-30:]
         )
 
         metric_dev = np.abs(
@@ -2285,6 +2335,28 @@ def load_ic_profiler_prm_all_frames(filepath):
 
     return pd.DataFrame(rows)
 
+
+def differential_frames(df_integrated):
+
+    df = df_integrated.copy()
+
+    detector_cols = [
+        c for c in df.columns
+        if c not in ["TIMETIC", "UPDATE#"]
+    ]
+
+    df_diff = df.copy()
+
+    df_diff[detector_cols] = (
+        df[detector_cols]
+        .diff()
+    )
+
+    df_diff.loc[0, detector_cols] = (
+        df.loc[0, detector_cols]
+    )
+
+    return df_diff.reset_index(drop=True)
 
 
 def analyze_fogliata_linear(
@@ -3232,10 +3304,15 @@ def mostrar_perfiles(file_path):
 
     global canvas_actual
 
+
     # eliminar gráfica previa
     if canvas_actual is not None:
 
+        old_fig = canvas_actual.figure
+
         canvas_actual.get_tk_widget().destroy()
+
+        plt.close(old_fig)
 
     # generar figura SIN mostrarla
     fig = process_file(
@@ -3298,10 +3375,16 @@ def mostrar_estabilidad(file_path):
         "fff" in nombre_archivo.lower()
     )
 
-    all_frames = load_ic_profiler_prm_all_frames(
-        file_path
+    all_frames_int = (
+        load_ic_profiler_prm_all_frames(
+            file_path
+        )
     )
 
+    all_frames = differential_frames(
+        all_frames_int
+    )
+    
     field_size_cm = (
         get_field_size_from_filename(
             nombre_archivo
@@ -3394,6 +3477,21 @@ def exportar_csv():
 # ------------------------------------------
 
 root = tk.Tk()
+
+def cerrar_aplicacion():
+
+    plt.close("all")
+
+    root.quit()
+
+    root.destroy()
+
+    os._exit(0)
+
+root.protocol(
+    "WM_DELETE_WINDOW",
+    cerrar_aplicacion
+)
 
 modo_visualizacion = tk.StringVar(
     master=root,
