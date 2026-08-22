@@ -28,14 +28,12 @@ jobs:
     - name: Build EXE with PyInstaller
       run: |
         pyinstaller --onefile --windowed --name=gatingSGRT "gating SGRT.v2.py"
-    - name: Upload EXE to repository
-      run: |
-        git config --global user.email "action@github.com"
-        git config --global user.name "GitHub Action"
-        copy dist\starshot.exe starshot.exe
-        git add starshot.exe
-        git commit -m "Add compiled gatingSGRT.exe [skip ci]" || true
-        git push || true
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gatingSGRT-exe
+        path: dist/gatingSGRT.exe
+        retention-days: 90
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
