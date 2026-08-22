@@ -10,30 +10,30 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         ref: starshot
 
     - name: Set up Python 3.11 (64-bit)
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
-        architecture: 'x64'
+        python-version: "3.11"
+        architecture: "x64"
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
         pip install -r requirements-gating.txt
+
     - name: Build EXE with PyInstaller
       run: |
         pyinstaller --onefile --windowed --name=gatingSGRT "gating SGRT.v2.py"
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: gatingSGRT-exe
-        path: dist/gatingSGRT.exe
-        retention-days: 90
+
+    - name: List dist folder
+      run: |
+        dir dist
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
