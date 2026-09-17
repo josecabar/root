@@ -577,6 +577,51 @@ def eliminar_prm():
         canvas_actual.get_tk_widget().destroy()
         canvas_actual = None
 
+def guardar_configuracion():
+
+    seleccion = tree.selection()
+
+    if not seleccion:
+        return
+
+    file_path = seleccion[0]
+
+    nuevo_tipo = combo_tipo.get()
+
+    nuevo_campo = float(
+        entry_campo.get()
+    )
+
+    configuracion_archivos[
+        file_path
+    ] = {
+
+        "tipo": nuevo_tipo,
+
+        "field_size_cm": nuevo_campo
+    }
+
+    nombre = os.path.basename(
+        file_path
+    )
+
+    tree.item(
+        file_path,
+        values=(
+            nombre,
+            nuevo_tipo,
+            nuevo_campo
+        )
+    )
+
+    # Reanalizar el archivo con los nuevos parámetros
+
+    resultados_globales[file_path] = process_file(
+        file_path,
+        show_plot=False
+    )
+
+    actualizar_grafica()
         
 def guardar_resultados_csv(
     csv_path,
@@ -641,6 +686,15 @@ def guardar_resultados_csv(
             "X_Unflatness":
                 resultados["X"]["Unflatness"],
 
+            "X_FW90_Dmax (cm)":
+                resultados["X"]["FW90_Dmax"],
+
+            "X_FW75_Dmax (cm)":
+                resultados["X"]["FW75_Dmax"],
+
+            "X_FW60_Dmax (cm)":
+                resultados["X"]["FW60_Dmax"],
+
             "X_SlopeAvg":
                 resultados["X"]["SlopeAvg"],
 
@@ -664,6 +718,15 @@ def guardar_resultados_csv(
 
             "Y_Unflatness":
                 resultados["Y"]["Unflatness"],
+
+            "Y_FW90_Dmax (cm)":
+                resultados["Y"]["FW90_Dmax"],
+
+            "Y_FW75_Dmax (cm)":
+                resultados["Y"]["FW75_Dmax"],
+
+            "Y_FW60_Dmax (cm)":
+                resultados["Y"]["FW60_Dmax"],
 
             "Y_SlopeAvg":
                 resultados["Y"]["SlopeAvg"],
@@ -761,7 +824,6 @@ def analyze_flat_beam(profile):
     y = profile["y"]
 
     field_size = profile["field_size"]
-    field_size_cm = profile["field_size_cm"]
     field_center = profile["field_center"]
     field_region = profile["field_region"]
 
@@ -1535,7 +1597,8 @@ def process_file(
     )
 
     es_fff = (
-        "fff" in nombre_archivo.lower()
+        configuracion_archivos[file_path]["tipo"]
+        == "FFF"
     )
 
     all_frames = load_ic_profiler_prm_all_frames(
@@ -1544,11 +1607,8 @@ def process_file(
 
     net_doses = all_frames.iloc[-1]
 
-    field_size_cm = (
-        get_field_size_from_filename(
-            nombre_archivo
-        )
-    )
+    field_size_cm = (configuracion_archivos[file_path]["field_size_cm"])
+
 
     # =====================================
     # ANALISIS DE LOS 4 EJES
@@ -1946,7 +2006,7 @@ def process_file(
                 f"Left Penumbra = {pen_left:.1f} mm\n"
                 f"Left Slope = {res['SlopeLeft']:.3f} mm⁻¹\n"
                 f"Slope Avg = {res['SlopeAvg']:.3f} mm⁻¹\n"
-                f"Unflatness = {res['Unflatness']:.1f}"
+                f"Unflatness = {res['Unflatness']:.1f} %"
             )
 
             ax.text(
@@ -2645,6 +2705,28 @@ def analyze_fogliata_linear(
         r20 - r80
     )
 
+
+    # =============================
+    # 
+    # =============================
+
+    dose90 = 0.90 * renorm_val
+    dose75 = 0.75 * renorm_val
+    dose60 = 0.60 * renorm_val
+
+    l90 = float(f_left(dose90))
+    r90 = float(f_right(dose90))
+    fw90 = r90 - l90
+
+    l75 = float(f_left(dose75))
+    r75 = float(f_right(dose75))
+    fw75 = r75 - l75
+
+    l60 = float(f_left(dose60))
+    r60 = float(f_right(dose60))
+    fw60 = r60 - l60
+
+
     # =============================
     # Field Region Fogliata
     # =============================
@@ -3103,53 +3185,47 @@ def analyze_fogliata_linear(
                 round(
                     pen_right,
                     3
-                )
+                ),
+            "FW90_Dmax":
+                round(fw90 / 10, 3),
+
+            "FW75_Dmax":
+                round(fw75 / 10, 3),
+
+            "FW60_Dmax":
+                round(fw60 / 10, 3),
         }
     }
 
-def cargar_prm():
+def cargar_configuracion_fila(event=None):
 
-    files = filedialog.askopenfilenames(
-        title="Seleccionar PRM",
-        filetypes=[
-            ("PRM", "*.prm")
-        ]
+    seleccion = tree.selection()
+
+    if not seleccion:
+        return
+
+    file_path = seleccion[0]
+
+    config = configuracion_archivos[
+        file_path
+    ]
+
+    combo_tipo.set(
+        config["tipo"]
     )
 
-    for file_path in files:
+    entry_campo.delete(
+        0,
+        tk.END
+    )
 
-        nombre = os.path.basename(
-            file_path
+    entry_campo.insert(
+        0,
+        str(
+            config["field_size_cm"]
         )
+    )
 
-        es_fff = (
-            "fff"
-            in nombre.lower()
-        )
-
-        tipo = (
-            "FFF"
-            if es_fff
-            else "FLAT"
-        )
-
-        # análisis
-        resultados[file_path] = (
-            process_file(
-                file_path,
-                show_plot=False
-            )
-        )
-
-        tree.insert(
-            "",
-            "end",
-            iid=file_path,
-            values=(
-                nombre,
-                tipo
-            )
-        )
 
 def visualizar(event):
 
@@ -3188,6 +3264,8 @@ def exportar_csv():
 
 resultados_globales = {}
 
+configuracion_archivos = {}
+
 ultima_carpeta_prm = ""
 
 canvas_actual = None
@@ -3218,10 +3296,6 @@ def cargar_prm():
             continue
 
         try:
-            resultados_globales[file_path] = process_file(
-                file_path,
-                show_plot=False
-            )
 
             nombre = os.path.basename(
                 file_path
@@ -3233,13 +3307,32 @@ def cargar_prm():
                 else "FLAT"
             )
 
+            field_size_cm = (
+                get_field_size_from_filename(
+                    nombre
+                )
+            )
+
+            configuracion_archivos[file_path] = {
+
+                "tipo": tipo,
+
+                "field_size_cm": field_size_cm
+            }
+
+            resultados_globales[file_path] = process_file(
+                file_path,
+                show_plot=False
+            )
+
             tree.insert(
                 "",
                 "end",
                 iid=file_path,
                 values=(
                     nombre,
-                    tipo
+                    tipo,
+                    field_size_cm
                 )
             )
 
@@ -3262,6 +3355,42 @@ def visualizar():
 
     mostrar_perfiles(file_path)
 
+def actualizar_botones_visualizacion():
+
+    if modo_visualizacion.get() == "PERFILES":
+
+        btn_profiles.config(
+            bg="lightgreen",
+            activebackground="lightgreen",
+            relief="sunken",
+            font=("Arial", 12, "bold")
+        )
+
+        btn_stability.config(
+            bg="SystemButtonFace",
+            activebackground="SystemButtonFace",
+            relief="raised",
+            font=("Arial", 12)
+        )
+
+    else:
+
+        btn_stability.config(
+            bg="lightgreen",
+            activebackground="lightgreen",
+            relief="sunken",
+            font=("Arial", 12, "bold")
+        )
+
+        btn_profiles.config(
+            bg="SystemButtonFace",
+            activebackground="SystemButtonFace",
+            relief="raised",
+            font=("Arial", 12)
+        )
+
+        
+        
 def actualizar_grafica(event=None):
 
     seleccion = tree.selection()
@@ -3283,21 +3412,23 @@ def actualizar_grafica(event=None):
 
 def activar_perfiles():
 
-    global modo_visualizacion
+    modo_visualizacion.set(
+        "PERFILES"
+    )
 
-    modo_visualizacion = "PERFILES"
+    actualizar_botones_visualizacion()
 
     actualizar_grafica()
-
 
 def activar_estabilidad():
 
-    global modo_visualizacion
+    modo_visualizacion.set(
+        "ESTABILIDAD"
+    )
 
-    modo_visualizacion = "ESTABILIDAD"
+    actualizar_botones_visualizacion()
 
     actualizar_grafica()
-
 
 
 def mostrar_perfiles(file_path):
@@ -3371,9 +3502,7 @@ def mostrar_estabilidad(file_path):
         file_path
     )
 
-    es_fff = (
-        "fff" in nombre_archivo.lower()
-    )
+    es_fff = (configuracion_archivos[file_path]["tipo"] == "FFF")
 
     all_frames_int = (
         load_ic_profiler_prm_all_frames(
@@ -3385,11 +3514,7 @@ def mostrar_estabilidad(file_path):
         all_frames_int
     )
     
-    field_size_cm = (
-        get_field_size_from_filename(
-            nombre_archivo
-        )
-    )
+    field_size_cm = (configuracion_archivos[file_path]["field_size_cm"])
 
     global canvas_actual
 
@@ -3449,10 +3574,7 @@ def exportar_csv():
             )
         )
 
-        es_fff = (
-            "fff"
-            in nombre_archivo.lower()
-        )
+        es_fff = (configuracion_archivos[file_path]["tipo"] == "FFF")
 
         csv_name = os.path.join(
             carpeta,
@@ -3521,14 +3643,113 @@ main_frame.pack(
 # Panel izquierdo
 # ------------------------------------------
 
-frame_left = tk.Frame(
-    main_frame,
-    width=300
-)
+frame_left = tk.Frame(main_frame)
 
 frame_left.pack(
     side="left",
     fill="y",
+    padx=5,
+    pady=5
+)
+
+frame_archivos = tk.LabelFrame(
+    frame_left,
+    text="Archivos"
+)
+
+frame_archivos.pack(
+    fill="x",
+    padx=5,
+    pady=5
+)
+
+frame_config = tk.LabelFrame(
+    frame_left,
+    text="Configuración"
+)
+
+frame_config.pack(
+    fill="x",
+    padx=5,
+    pady=5
+)
+
+# ------------------------------------------
+# Visualización
+# ------------------------------------------
+
+frame_visual = tk.LabelFrame(
+    frame_left,
+    text="Visualización"
+)
+
+frame_visual.pack(
+    fill="x",
+    padx=5,
+    pady=5
+)
+
+frame_visual_buttons = tk.Frame(
+    frame_visual
+)
+
+frame_visual_buttons.pack(
+    fill="x",
+    padx=5,
+    pady=5
+)
+
+global btn_profiles
+global btn_stability
+
+btn_profiles = tk.Button(
+    frame_visual_buttons,
+    text="Perfiles",
+    command=activar_perfiles
+)
+
+btn_profiles.pack(
+    side="left",
+    fill="x",
+    expand=True
+)
+
+btn_stability = tk.Button(
+    frame_visual_buttons,
+    text="Estabilidad",
+    command=activar_estabilidad
+)
+
+btn_stability.pack(
+    side="left",
+    fill="x",
+    expand=True
+)
+
+actualizar_botones_visualizacion()
+
+
+frame_lista = tk.LabelFrame(
+    frame_left,
+    text="Archivos cargados"
+)
+
+frame_lista.pack(
+    fill="both",
+    expand=True,
+    padx=5,
+    pady=5
+)
+
+
+frame_export = tk.LabelFrame(
+    frame_left,
+    text="Exportación"
+)
+
+frame_export.pack(
+    fill="x",
+    side="bottom",
     padx=5,
     pady=5
 )
@@ -3554,13 +3775,13 @@ frame_plot.pack(
 # ------------------------------------------
 
 btn_load = tk.Button(
-    frame_left,
+    frame_archivos,
     text="Cargar archivos PRM",
     command=cargar_prm
 )
 
 btn_load.pack(
-    pady=10,
+    pady=2,
     fill="x"
 )
 
@@ -3569,57 +3790,106 @@ btn_load.pack(
 # Botón eliminar
 # ------------------------------------------
 
+
 btn_delete = tk.Button(
-    frame_left,
+    frame_archivos,
     text="Eliminar seleccionado",
     command=eliminar_prm,
     bg="tomato"
 )
 
 btn_delete.pack(
-    pady=5,
+    pady=2,
     fill="x"
 )
+
+frame_tipo = tk.Frame(frame_config)
+
+frame_tipo.pack(
+    fill="x",
+    padx=5,
+    pady=3
+)
+
+tk.Label(
+    frame_tipo,
+    text="Tipo",
+    width=10,
+    anchor="w"
+).pack(
+    side="left"
+)
+
+combo_tipo = ttk.Combobox(
+    frame_tipo,
+    values=["FLAT", "FFF"],
+    state="readonly"
+)
+
+combo_tipo.pack(
+    side="left",
+    fill="x",
+    expand=True
+)
+
+frame_campo = tk.Frame(frame_config)
+
+frame_campo.pack(
+    fill="x",
+    padx=5,
+    pady=3
+)
+
+tk.Label(
+    frame_campo,
+    text="Campo (cm)",
+    width=10,
+    anchor="w"
+).pack(
+    side="left"
+)
+
+entry_campo = tk.Entry(
+    frame_campo,
+    justify="right"
+)
+
+entry_campo.pack(
+    side="left",
+    fill="x",
+    expand=True
+)
+
 
 # ------------------------------------------
-# Botón estabilidad
+# Botón guardar
 # ------------------------------------------
-rb_profiles = tk.Radiobutton(
-    frame_left,
-    text="Perfiles",
-    variable=modo_visualizacion,
-    value="PERFILES",
-    command=actualizar_grafica
+
+btn_guardar = tk.Button(
+    frame_config,
+    text="Aplicar cambios",
+    command=guardar_configuracion
 )
 
-rb_profiles.pack(
-    fill="x"
+btn_guardar.pack(
+    fill="x",
+    pady=5
 )
 
-rb_stability = tk.Radiobutton(
-    frame_left,
-    text="Estabilidad",
-    variable=modo_visualizacion,
-    value="ESTABILIDAD",
-    command=actualizar_grafica
-)
-
-rb_stability.pack(
-    fill="x"
-)
 
 # ------------------------------------------
 # Lista archivos
 # ------------------------------------------
 
 tree = ttk.Treeview(
-    frame_left,
+    frame_lista,
     columns=(
         "archivo",
-        "tipo"
+        "tipo",
+        "campo"
     ),
     show="headings",
-    height=25
+    height=12
 )
 
 tree.heading(
@@ -3630,6 +3900,11 @@ tree.heading(
 tree.heading(
     "tipo",
     text="Tipo"
+)
+
+tree.heading(
+    "campo",
+    text="Campo (cm)"
 )
 
 tree.column(
@@ -3643,6 +3918,11 @@ tree.column(
     anchor="center"
 )
 
+tree.column(
+    "campo",
+    width=80,
+    anchor="center"
+)
 tree.pack(
     fill="both",
     expand=True
@@ -3657,20 +3937,28 @@ tree.bind(
     actualizar_grafica
 )
 
+tree.bind(
+    "<<TreeviewSelect>>",
+    cargar_configuracion_fila,
+    add="+"
+)
+
+
 # ------------------------------------------
 # Botón exportar
 # ------------------------------------------
 
 btn_export = tk.Button(
-    frame_left,
-    text="Exportar resultados CSV",
+    frame_export,
+    text="Exportar CSV",
     command=exportar_csv,
     bg="lightgreen"
 )
 
 btn_export.pack(
-    pady=10,
-    fill="x"
+    in_=frame_export,
+    fill="x",
+    pady=2
 )
 
 # ------------------------------------------
