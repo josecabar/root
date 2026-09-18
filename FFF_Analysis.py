@@ -3569,9 +3569,8 @@ def exportar_csv():
         )
 
         campo_actual = (
-            obtener_campo(
-                nombre_archivo
-            )
+            configuracion_archivos[file_path]
+            ["field_size_cm"]
         )
 
         es_fff = (configuracion_archivos[file_path]["tipo"] == "FFF")
