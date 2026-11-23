@@ -3,33 +3,35 @@ name: Build HWL Renamer
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
+
   build:
+
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+    - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-HWL.txt
-          pip install pyinstaller
+    - name: Set up Python 3.12 (64-bit)
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        architecture: "x64"
 
-      - name: Build EXE
-        run: pyinstaller --onefile --windowed --name HWL_Renamer HWL_Renamer.py
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements-HWL.txt
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: HWL_Renamer
-          path: dist/HWL_Renamer.exe
+    - name: Build EXE with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed --name=HWL_Renamer HWL_Renamer.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: HWL_Renamer-Win64
+        path: dist/HWL_Renamer.exe
+        retention-days: 90
